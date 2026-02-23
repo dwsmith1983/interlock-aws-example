@@ -1,0 +1,28 @@
+id: gharchive-silver
+name: GH Archive Silver ETL
+description: Transform raw GH Archive events from bronze JSONL to silver Delta table
+archetype: silver-etl
+traits:
+  - type: source-freshness
+    evaluator: evaluate/source-freshness
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "bronze/gharchive/"
+      maxAgeSeconds: 86400
+  - type: record-count
+    evaluator: evaluate/record-count
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "bronze/gharchive/"
+      minObjects: 1
+trigger:
+  type: glue
+  jobName: medallion-silver-gharchive
+  arguments:
+    "--source": "gharchive"
+    "--tier": "silver"
+    "--date": "${date}"
+    "--hour": "${hour}"
+sla:
+  evaluationDeadline: "+30m"
+  timezone: "UTC"
