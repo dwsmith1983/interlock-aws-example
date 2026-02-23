@@ -1,0 +1,30 @@
+# Go
+*.exe
+*.test
+*.out
+
+# Build artifacts
+deploy/dist/
+/seed
+
+# Terraform
+deploy/terraform/.terraform/
+deploy/terraform/.build/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+tfplan
+!terraform.tfvars.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# E2E results
+e2e/results/
+
+# IDE
+.idea/
+.vscode/
