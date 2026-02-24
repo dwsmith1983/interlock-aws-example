@@ -13,6 +13,7 @@ LAMBDAS=(
   orchestrator
   trigger
   run-checker
+  watchdog
 )
 
 INTERLOCK_VERSION="${INTERLOCK_VERSION:-v0.1.0}"

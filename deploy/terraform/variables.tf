@@ -124,6 +124,12 @@ variable "enable_glue_trigger" {
   default     = true
 }
 
+variable "watchdog_interval" {
+  description = "EventBridge schedule expression for the watchdog Lambda"
+  type        = string
+  default     = "rate(5 minutes)"
+}
+
 variable "destroy_on_delete" {
   description = "Allow Terraform to destroy stateful resources (DynamoDB, S3)"
   type        = bool

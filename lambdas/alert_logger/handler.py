@@ -28,10 +28,11 @@ def handler(event, context):
         except json.JSONDecodeError:
             alert = {"raw": message_str}
 
-        pipeline_id = alert.get("pipelineID", alert.get("pipeline", "unknown"))
-        schedule_id = alert.get("scheduleID", alert.get("schedule", ""))
-        alert_type = alert.get("type", alert.get("alertType", "unknown"))
-        severity = alert.get("severity", "warning")
+        pipeline_id = alert.get("pipelineId", alert.get("pipelineID", "unknown"))
+        details = alert.get("details", {})
+        schedule_id = details.get("scheduleId", alert.get("scheduleID", ""))
+        alert_type = details.get("type", alert.get("type", "unknown"))
+        severity = alert.get("level", alert.get("severity", "warning"))
 
         # Structured log line
         log_entry = {
