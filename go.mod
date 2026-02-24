@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.9
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.55.0
-	github.com/dwsmith1983/interlock v0.1.0
+	github.com/dwsmith1983/interlock v0.1.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
