@@ -16,7 +16,7 @@ LAMBDAS=(
   watchdog
 )
 
-INTERLOCK_VERSION="${INTERLOCK_VERSION:-v0.1.0}"
+INTERLOCK_VERSION="${INTERLOCK_VERSION:-v0.1.1}"
 INTERLOCK_MODULE="github.com/dwsmith1983/interlock"
 
 echo "Fetching interlock@${INTERLOCK_VERSION} source..."
