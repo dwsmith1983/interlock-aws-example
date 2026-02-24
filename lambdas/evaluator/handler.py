@@ -67,14 +67,17 @@ def handler(event, context):
 
 
 def evaluate_source_freshness(config):
-    """Check newest object in the hour-scoped S3 prefix is within maxAgeSeconds."""
+    """Check newest object in the date/hour-scoped S3 prefix is within maxAgeSeconds."""
     bucket = config["bucket"]
     prefix = config["prefix"]
     max_age = config.get("maxAgeSeconds", 900)
     hour = config.get("hour")
     date = config.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
 
-    scoped_prefix = f"{prefix}dt={date}/hh={hour:02d}/" if hour is not None else prefix
+    if hour is not None:
+        scoped_prefix = f"{prefix}dt={date}/hh={hour:02d}/"
+    else:
+        scoped_prefix = f"{prefix}dt={date}/"
 
     newest = _newest_object_time(bucket, scoped_prefix)
     if newest is None:
