@@ -6,7 +6,7 @@ scenarios:
   - id: sfn-kill
     category: infrastructure
     severity: severe
-    probability: 0.05
+    probability: 0.15
     target: "*"
     cooldown_minutes: 30
     recovery_timeout_minutes: 60
@@ -14,7 +14,7 @@ scenarios:
   - id: lambda-throttle
     category: infrastructure
     severity: severe
-    probability: 0.03
+    probability: 0.15
     target: "*"
     cooldown_minutes: 30
     throttle_duration_minutes: 5
@@ -23,25 +23,17 @@ scenarios:
   - id: lambda-throttle-ingest
     category: infrastructure
     severity: severe
-    probability: 0.03
+    probability: 0.15
     target: "*"
     cooldown_minutes: 30
     throttle_duration_minutes: 10
     recovery_timeout_minutes: 30
 
   # Category 2: Data plane
-  - id: delete-bronze
-    category: data
-    severity: moderate
-    probability: 0.10
-    target: "*"
-    cooldown_minutes: 20
-    recovery_timeout_minutes: 40
-
   - id: corrupt-bronze
     category: data
     severity: moderate
-    probability: 0.05
+    probability: 0.25
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 40
@@ -49,23 +41,23 @@ scenarios:
   - id: empty-bronze
     category: data
     severity: mild
-    probability: 0.05
+    probability: 0.35
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 40
 
-  - id: corrupt-delta-log
+  - id: glue-kill
     category: data
     severity: severe
-    probability: 0.02
+    probability: 0.15
     target: "*"
-    cooldown_minutes: 60
-    recovery_timeout_minutes: 120
+    cooldown_minutes: 30
+    recovery_timeout_minutes: 60
 
   - id: wrong-partition
     category: data
     severity: mild
-    probability: 0.05
+    probability: 0.35
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 40
@@ -74,7 +66,7 @@ scenarios:
   - id: delete-lock
     category: control
     severity: severe
-    probability: 0.03
+    probability: 0.15
     target: "*"
     cooldown_minutes: 30
     recovery_timeout_minutes: 60
@@ -82,23 +74,15 @@ scenarios:
   - id: corrupt-runlog
     category: control
     severity: moderate
-    probability: 0.05
+    probability: 0.25
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 40
 
-  - id: delete-config
-    category: control
-    severity: severe
-    probability: 0.02
-    target: "*"
-    cooldown_minutes: 60
-    recovery_timeout_minutes: 60
-
   - id: cas-conflict
     category: control
     severity: moderate
-    probability: 0.05
+    probability: 0.25
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 30
@@ -106,7 +90,7 @@ scenarios:
   - id: corrupt-runlog-json
     category: control
     severity: moderate
-    probability: 0.05
+    probability: 0.25
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 40
@@ -115,7 +99,7 @@ scenarios:
   - id: dup-marker
     category: cascade
     severity: mild
-    probability: 0.10
+    probability: 0.40
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 20
@@ -123,39 +107,23 @@ scenarios:
   - id: burst-markers
     category: cascade
     severity: moderate
-    probability: 0.05
+    probability: 0.25
     target: "*"
     cooldown_minutes: 30
     recovery_timeout_minutes: 20
 
-  - id: future-marker
-    category: cascade
-    severity: moderate
-    probability: 0.05
-    target: "*"
-    cooldown_minutes: 30
-    recovery_timeout_minutes: 60
-
   - id: late-data
     category: cascade
     severity: moderate
-    probability: 0.05
+    probability: 0.25
     target: "earthquake*"
-    cooldown_minutes: 30
-    recovery_timeout_minutes: 60
-
-  - id: delete-upstream-runlog
-    category: cascade
-    severity: moderate
-    probability: 0.05
-    target: "*-gold"
     cooldown_minutes: 30
     recovery_timeout_minutes: 60
 
   - id: orphan-marker
     category: cascade
     severity: mild
-    probability: 0.05
+    probability: 0.35
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 20
@@ -164,7 +132,7 @@ scenarios:
   - id: eval-block
     category: evaluator
     severity: moderate
-    probability: 0.08
+    probability: 0.30
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 30
@@ -172,23 +140,15 @@ scenarios:
   - id: eval-slow
     category: evaluator
     severity: moderate
-    probability: 0.05
+    probability: 0.25
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 30
 
-  - id: eval-false-pass
-    category: evaluator
-    severity: severe
-    probability: 0.02
-    target: "*"
-    cooldown_minutes: 30
-    recovery_timeout_minutes: 60
-
   - id: dup-data
     category: evaluator
     severity: mild
-    probability: 0.10
+    probability: 0.40
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 20

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -163,17 +165,23 @@ func seedChaosConfig(ctx context.Context, client *dynamodb.Client, tableName, ch
 func seedControlRecord(ctx context.Context, client *dynamodb.Client, tableName, pipelineID string) error {
 	pk := "CONTROL#" + pipelineID
 	_, err := client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: &tableName,
+		TableName:           &tableName,
+		ConditionExpression: aws.String("attribute_not_exists(PK)"),
 		Item: map[string]ddbtypes.AttributeValue{
-			"PK":                   &ddbtypes.AttributeValueMemberS{Value: pk},
-			"SK":                   &ddbtypes.AttributeValueMemberS{Value: "STATUS"},
-			"GSI1PK":               &ddbtypes.AttributeValueMemberS{Value: "CONTROLS"},
-			"GSI1SK":               &ddbtypes.AttributeValueMemberS{Value: pipelineID},
-			"enabled":              &ddbtypes.AttributeValueMemberBOOL{Value: true},
-			"consecutiveFailures":  &ddbtypes.AttributeValueMemberN{Value: "0"},
-			"chaosActive":          &ddbtypes.AttributeValueMemberBOOL{Value: false},
+			"PK":                  &ddbtypes.AttributeValueMemberS{Value: pk},
+			"SK":                  &ddbtypes.AttributeValueMemberS{Value: "STATUS"},
+			"GSI1PK":              &ddbtypes.AttributeValueMemberS{Value: "CONTROLS"},
+			"GSI1SK":              &ddbtypes.AttributeValueMemberS{Value: pipelineID},
+			"enabled":             &ddbtypes.AttributeValueMemberBOOL{Value: true},
+			"consecutiveFailures": &ddbtypes.AttributeValueMemberN{Value: "0"},
+			"chaosActive":         &ddbtypes.AttributeValueMemberBOOL{Value: false},
 		},
 	})
+	// Ignore ConditionalCheckFailedException — record already exists
+	var ccfe *ddbtypes.ConditionalCheckFailedException
+	if errors.As(err, &ccfe) {
+		return nil
+	}
 	return err
 }
 
