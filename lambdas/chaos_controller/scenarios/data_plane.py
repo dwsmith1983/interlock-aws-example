@@ -4,7 +4,7 @@ Scenarios:
 - delete-bronze: Delete a recent bronze S3 object
 - corrupt-bronze: Overwrite a bronze file with invalid JSON
 - empty-bronze: Write a 0-byte file to bronze partition
-- corrupt-delta-log: Delete a Delta log file in silver
+- glue-kill: Stop a running Glue job mid-execution (partial write)
 - wrong-partition: Write bronze data with tomorrow's par_day
 """
 
@@ -18,6 +18,7 @@ import boto3
 logger = logging.getLogger(__name__)
 
 s3 = boto3.client("s3")
+glue = boto3.client("glue")
 
 SOURCES = ["earthquake", "crypto"]
 
@@ -73,22 +74,53 @@ def empty_bronze(ctx):
     return {"action": "empty_write", "key": key}
 
 
-def corrupt_delta_log(ctx):
-    """Delete or rename a Delta log file in the silver directory."""
-    bucket = ctx["bucket_name"]
-    source = _source_for_pipeline(ctx["pipeline_id"])
+def glue_kill(ctx):
+    """Stop a running Glue job mid-execution, simulating a partial write.
 
-    prefix = f"silver/{source}/_delta_log/"
-    obj = _pick_random_object(bucket, prefix)
-    if not obj:
-        return {"skipped": True, "reason": f"no delta log files at {prefix}"}
+    Delta Lake's ACID guarantees should handle the uncommitted transaction —
+    uncommitted files are ignored on the next read. This tests whether the
+    pipeline recovers cleanly on the next scheduled run.
+    """
+    pipeline_id = ctx["pipeline_id"]
+    job_name = _glue_job_for_pipeline(pipeline_id)
+    if not job_name:
+        return {"skipped": True, "reason": f"no Glue job mapping for {pipeline_id}"}
 
-    # Rename (copy + delete) to preserve data but break Delta
-    backup_key = obj + ".chaos_backup"
-    s3.copy_object(Bucket=bucket, CopySource=f"{bucket}/{obj}", Key=backup_key)
-    s3.delete_object(Bucket=bucket, Key=obj)
-    logger.info("corrupted delta log: moved %s to %s", obj, backup_key)
-    return {"action": "delta_log_corrupted", "originalKey": obj, "backupKey": backup_key}
+    try:
+        resp = glue.get_job_runs(JobName=job_name, MaxResults=5)
+    except Exception:
+        logger.exception("failed to list job runs for %s", job_name)
+        return {"skipped": True, "reason": f"error listing runs for {job_name}"}
+
+    running = [r for r in resp.get("JobRuns", []) if r["JobRunState"] == "RUNNING"]
+    if not running:
+        return {"skipped": True, "reason": f"no running jobs for {job_name}"}
+
+    target_run = random.choice(running)
+    run_id = target_run["Id"]
+
+    try:
+        glue.batch_stop_job_run(JobName=job_name, JobRunIds=[run_id])
+    except Exception:
+        logger.exception("failed to stop Glue job run %s/%s", job_name, run_id)
+        return {"skipped": True, "reason": f"error stopping {job_name}/{run_id}"}
+
+    logger.info("killed Glue job run %s/%s (partial write)", job_name, run_id)
+    return {"action": "glue_killed", "jobName": job_name, "runId": run_id}
+
+
+# Glue job name mapping: pipeline ID → Glue job name
+_GLUE_JOB_MAP = {
+    "earthquake-silver": "medallion-silver-earthquake",
+    "earthquake-gold": "medallion-gold-earthquake",
+    "crypto-silver": "medallion-silver-crypto",
+    "crypto-gold": "medallion-gold-crypto",
+}
+
+
+def _glue_job_for_pipeline(pipeline_id):
+    """Resolve Glue job name from pipeline ID."""
+    return _GLUE_JOB_MAP.get(pipeline_id)
 
 
 def wrong_partition(ctx):

@@ -74,7 +74,8 @@ resource "aws_lambda_permission" "chaos_controller_eventbridge" {
 # =============================================================================
 # Chaos Controller IAM Role
 # Needs: DynamoDB RW, S3 RW, SFN ListExecutions/StopExecution,
-#         Lambda PutFunctionConcurrency/DeleteFunctionConcurrency/ListFunctions
+#         Lambda PutFunctionConcurrency/DeleteFunctionConcurrency/ListFunctions,
+#         Glue GetJobRuns/BatchStopJobRun
 # =============================================================================
 
 resource "aws_iam_role" "chaos_controller" {
@@ -145,6 +146,15 @@ resource "aws_iam_role_policy" "chaos_controller" {
           "lambda:ListFunctions",
         ]
         Resource = ["*"]
+      },
+      {
+        Sid    = "GlueKill"
+        Effect = "Allow"
+        Action = [
+          "glue:GetJobRuns",
+          "glue:BatchStopJobRun",
+        ]
+        Resource = [for name, _ in local.glue_jobs : aws_glue_job.etl[name].arn]
       },
     ]
   })
