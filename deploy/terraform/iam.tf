@@ -258,6 +258,12 @@ resource "aws_iam_role_policy" "stream_router" {
         Action   = ["states:StartExecution"]
         Resource = [aws_sfn_state_machine.pipeline.arn]
       },
+      {
+        Sid      = "SNSPublishLifecycle"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = [aws_sns_topic.lifecycle.arn]
+      },
     ]
   })
 }
@@ -511,9 +517,9 @@ resource "aws_iam_role_policy" "pipeline_monitor" {
         Resource = ["${aws_dynamodb_table.main.arn}/stream/*"]
       },
       {
-        Sid    = "DynamoDBWrite"
+        Sid    = "DynamoDBReadWrite"
         Effect = "Allow"
-        Action = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+        Action = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
         Resource = [
           aws_dynamodb_table.main.arn,
           "${aws_dynamodb_table.main.arn}/index/*",
