@@ -2,6 +2,28 @@ resource "aws_sns_topic" "alerts" {
   name = "${var.table_name}-alerts"
 }
 
+resource "aws_sns_topic" "lifecycle" {
+  name = "${var.table_name}-lifecycle"
+}
+
+# =============================================================================
+# Lifecycle topic — pipeline-monitor subscribes for active chaos recovery
+# =============================================================================
+
+resource "aws_sns_topic_subscription" "pipeline_monitor_lifecycle" {
+  topic_arn = aws_sns_topic.lifecycle.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.python["pipeline-monitor"].arn
+}
+
+resource "aws_lambda_permission" "sns_lifecycle_monitor" {
+  statement_id  = "AllowLifecycleSNSInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.python["pipeline-monitor"].function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.lifecycle.arn
+}
+
 # =============================================================================
 # Alert logger — SNS subscriber that logs + persists alerts to DynamoDB
 # =============================================================================

@@ -71,7 +71,8 @@ resource "aws_lambda_function" "stream_router" {
     variables = merge(
       local.go_lambda_common_env,
       {
-        STATE_MACHINE_ARN = aws_sfn_state_machine.pipeline.arn
+        STATE_MACHINE_ARN   = aws_sfn_state_machine.pipeline.arn
+        LIFECYCLE_TOPIC_ARN = aws_sns_topic.lifecycle.arn
       }
     )
   }
