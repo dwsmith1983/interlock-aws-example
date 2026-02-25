@@ -37,7 +37,7 @@ SCENARIO_REGISTRY = {
     "delete-bronze": data_plane.delete_bronze,
     "corrupt-bronze": data_plane.corrupt_bronze,
     "empty-bronze": data_plane.empty_bronze,
-    "corrupt-delta-log": data_plane.corrupt_delta_log,
+    "glue-kill": data_plane.glue_kill,
     "wrong-partition": data_plane.wrong_partition,
     # Category 3: Control plane
     "delete-lock": control_plane.delete_lock,
