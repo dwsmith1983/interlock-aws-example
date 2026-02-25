@@ -103,6 +103,7 @@ def _has_recovered(table_name, target, injected_at):
             try:
                 data = json.loads(data_str)
             except json.JSONDecodeError:
+                logger.warning("skipping RUNLOG with corrupt JSON for %s: %s", target, data_str[:200])
                 continue
             if data.get("status") == "COMPLETED":
                 completed_at_str = data.get("completedAt", "")
