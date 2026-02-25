@@ -120,6 +120,11 @@ def handler(event, context):
         if not target:
             continue
 
+        # Per-target throttle: skip if target already has >= 2 active faults
+        if _active_faults_for_target(target, now) >= 2:
+            logger.info("target %s already has >= 2 active faults, skipping %s", target, scenario_id)
+            continue
+
         # Execute scenario
         fn = SCENARIO_REGISTRY.get(scenario_id)
         if not fn:
@@ -213,6 +218,28 @@ def _matches_pattern(pipeline_id, pattern):
     if pattern.endswith("*"):
         return pipeline_id.startswith(pattern[:-1])
     return pipeline_id == pattern
+
+
+def _active_faults_for_target(target, now):
+    """Count active (INJECTED/DETECTED) chaos events for a specific target."""
+    try:
+        resp = ddb.query(
+            TableName=TABLE_NAME,
+            KeyConditionExpression="PK = :pk",
+            FilterExpression="#s IN (:s1, :s2) AND target = :tgt",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={
+                ":pk": {"S": "CHAOS#EVENTS"},
+                ":s1": {"S": "INJECTED"},
+                ":s2": {"S": "DETECTED"},
+                ":tgt": {"S": target},
+            },
+            Select="COUNT",
+        )
+        return resp.get("Count", 0)
+    except ClientError:
+        logger.exception("error counting active faults for %s", target)
+        return 0
 
 
 def _record_chaos_event(scenario_id, target, details, scenario_config, now):
