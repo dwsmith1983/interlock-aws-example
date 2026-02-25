@@ -204,6 +204,12 @@ def _update_control(pipeline_id, status, timestamp):
                     ":st": status_upper,
                 },
             )
+        elif status_upper == "RUNNING":
+            table.update_item(
+                Key=key,
+                UpdateExpression="SET lastStatus = :st",
+                ExpressionAttributeValues={":st": status_upper},
+            )
         else:
             logger.warning("unknown RUNLOG status: %s for %s", status, pipeline_id)
     except Exception:
