@@ -32,7 +32,8 @@ def handler(event, context):
         pipeline_id = alert.get("pipelineId", alert.get("pipelineID", "unknown"))
         details = alert.get("details", {})
         schedule_id = details.get("scheduleId", alert.get("scheduleID", ""))
-        alert_type = details.get("type", alert.get("type", "unknown"))
+        # Prefer new Category field (alertType), fall back to details.type, then alert.type
+        alert_type = alert.get("alertType", details.get("type", alert.get("type", "unknown")))
         severity = alert.get("level", alert.get("severity", "warning"))
 
         # Structured log line
@@ -70,7 +71,11 @@ def handler(event, context):
         )
 
         # Write ERROR# record for failures
-        if alert_type in ("error", "sla_breach", "evaluation_failure", "trigger_failure", "unknown"):
+        if alert_type in (
+            "error", "sla_breach", "evaluation_failure", "trigger_failure", "unknown",
+            "schedule_missed", "stuck_run", "evaluation_sla_breach",
+            "completion_sla_breach", "validation_timeout", "trait_drift",
+        ):
             error_sk = f"{timestamp}#{alert_type}"
             table.put_item(
                 Item={
@@ -80,7 +85,7 @@ def handler(event, context):
                     "GSI1SK": f"{timestamp}#{pipeline_id}",
                     "errorType": alert_type,
                     "scheduleID": schedule_id,
-                    "message": json.dumps(details),
+                    "message": alert.get("message", ""),
                     "resolved": False,
                     "timestamp": timestamp,
                     "ttl": now + RECORD_TTL_SECONDS,
@@ -94,18 +99,21 @@ def handler(event, context):
 
 
 def _update_control(pipeline_id, alert_type, timestamp):
-    """Update CONTROL# record with failure info."""
+    """Update CONTROL# record with alert metadata only.
+
+    Pipeline-monitor owns consecutiveFailures via COMPLETED/FAILED RUNLOG events.
+    Alert-logger only tracks the latest alert type and timestamp.
+    """
     try:
         table.update_item(
             Key={
                 "PK": f"CONTROL#{pipeline_id}",
                 "SK": "STATUS",
             },
-            UpdateExpression="SET lastFailedRun = :ts, lastAlertType = :at ADD consecutiveFailures :one",
+            UpdateExpression="SET lastAlertType = :at, lastAlertAt = :ts",
             ExpressionAttributeValues={
-                ":ts": timestamp,
                 ":at": alert_type,
-                ":one": 1,
+                ":ts": timestamp,
             },
         )
     except Exception:
