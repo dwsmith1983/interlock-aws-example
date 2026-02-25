@@ -3,7 +3,6 @@
 Scenarios:
 - delete-lock: Delete an active LOCK record
 - corrupt-runlog: Overwrite a COMPLETED RUNLOG status to FAILED
-- delete-config: Remove a PIPELINE#CONFIG record
 - cas-conflict: Force CAS conflict by bumping RunState version
 - corrupt-runlog-json: Write invalid JSON in RUNLOG data field
 """
@@ -104,31 +103,6 @@ def corrupt_runlog(ctx):
         return {"skipped": True, "reason": "error"}
 
 
-def delete_config(ctx):
-    """Remove a PIPELINE#CONFIG record."""
-    table = ctx["table_name"]
-    pipeline_id = ctx["pipeline_id"]
-
-    pk = f"PIPELINE#{pipeline_id}"
-    sk = "CONFIG"
-
-    try:
-        # Save backup before deleting
-        resp = ddb.get_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
-        if "Item" not in resp:
-            return {"skipped": True, "reason": f"no CONFIG for {pipeline_id}"}
-
-        # Store backup as chaos record
-        backup_data = json.dumps({k: _attr_to_val(v) for k, v in resp["Item"].items()})
-
-        ddb.delete_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
-        logger.info("deleted CONFIG for %s", pipeline_id)
-        return {"action": "deleted_config", "pipeline": pipeline_id, "backup": backup_data}
-    except ClientError:
-        logger.exception("error deleting config for %s", pipeline_id)
-        return {"skipped": True, "reason": "error"}
-
-
 def cas_conflict(ctx):
     """Force CAS conflict by writing RunState with incremented version."""
     table = ctx["table_name"]
@@ -210,14 +184,3 @@ def corrupt_runlog_json(ctx):
     except ClientError:
         logger.exception("error corrupting runlog JSON for %s", pipeline_id)
         return {"skipped": True, "reason": "error"}
-
-
-def _attr_to_val(attr):
-    """Convert DynamoDB attribute to Python value (simplified)."""
-    if "S" in attr:
-        return attr["S"]
-    if "N" in attr:
-        return attr["N"]
-    if "BOOL" in attr:
-        return attr["BOOL"]
-    return str(attr)
