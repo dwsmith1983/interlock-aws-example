@@ -28,6 +28,7 @@ resource "aws_lambda_function" "python" {
     variables = {
       TABLE_NAME  = aws_dynamodb_table.main.name
       BUCKET_NAME = aws_s3_bucket.data.id
+      START_DATE  = var.pipeline_start_date
     }
   }
 

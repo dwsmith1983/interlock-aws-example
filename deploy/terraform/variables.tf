@@ -104,17 +104,37 @@ variable "glue_timeout_minutes" {
   default     = 30
 }
 
-# EventBridge ingestion rates
-variable "gharchive_rate_minutes" {
-  description = "GH Archive ingestion interval (minutes)"
-  type        = number
-  default     = 60
+# Pipeline start date (YYYYMMDD) — first kick backfills from this date hour 00
+variable "pipeline_start_date" {
+  description = "Start date for pipeline schedules (YYYYMMDD). First ingestion backfills from this date."
+  type        = string
+  default     = "20260225"
 }
 
-variable "openmeteo_rate_minutes" {
-  description = "Open-Meteo ingestion interval (minutes)"
+# EventBridge ingestion rates
+variable "earthquake_rate_minutes" {
+  description = "USGS Earthquake ingestion interval (minutes)"
   type        = number
-  default     = 60
+  default     = 20
+}
+
+variable "crypto_rate_minutes" {
+  description = "CoinLore Crypto ingestion interval (minutes)"
+  type        = number
+  default     = 20
+}
+
+# Chaos testing
+variable "chaos_enabled" {
+  description = "Enable chaos testing Lambda and EventBridge rule"
+  type        = bool
+  default     = false
+}
+
+variable "chaos_rate_minutes" {
+  description = "Chaos controller invocation interval (minutes)"
+  type        = number
+  default     = 20
 }
 
 # Optional trigger permission flags

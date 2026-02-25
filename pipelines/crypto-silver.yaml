@@ -1,0 +1,33 @@
+id: crypto-silver
+name: Crypto Silver ETL
+description: Transform raw CoinLore ticker bronze data into curated silver Delta table
+archetype: silver-etl
+
+traits:
+  - type: source-freshness
+    evaluator: evaluate/source-freshness
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "bronze/crypto/"
+      maxAgeSeconds: 86400
+  - type: record-count
+    evaluator: evaluate/record-count
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "bronze/crypto/"
+      minObjects: 1
+
+trigger:
+  type: glue
+  jobName: medallion-silver-crypto
+  arguments:
+    "--source": crypto
+    "--tier": silver
+    "--bucket": "${BUCKET_NAME}"
+    "--table_name": "${TABLE_NAME}"
+    "--par_day": "${date}"
+    "--par_hour": "${hour}"
+
+sla:
+  evaluationDeadlineMinutes: 20
+  completionDeadlineMinutes: 35

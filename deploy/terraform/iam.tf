@@ -285,7 +285,7 @@ resource "aws_iam_role_policy" "alert_logger" {
     Statement = [{
       Sid    = "DynamoDBWrite"
       Effect = "Allow"
-      Action = ["dynamodb:PutItem"]
+      Action = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
       Resource = [
         aws_dynamodb_table.main.arn,
         "${aws_dynamodb_table.main.arn}/index/*",
@@ -481,6 +481,48 @@ resource "aws_iam_role_policy" "glue" {
   })
 }
 
+# --- pipeline-monitor: DynamoDB Stream Read + DynamoDB Write (CONTROL#/JOBLOG#) ---
+resource "aws_iam_role" "pipeline_monitor" {
+  name               = "${var.table_name}-pipeline-monitor"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "pipeline_monitor_basic" {
+  role       = aws_iam_role.pipeline_monitor.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "pipeline_monitor" {
+  name = "pipeline-monitor-policy"
+  role = aws_iam_role.pipeline_monitor.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DynamoDBStream"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetRecords",
+          "dynamodb:GetShardIterator",
+          "dynamodb:DescribeStream",
+          "dynamodb:ListStreams",
+        ]
+        Resource = ["${aws_dynamodb_table.main.arn}/stream/*"]
+      },
+      {
+        Sid    = "DynamoDBWrite"
+        Effect = "Allow"
+        Action = ["dynamodb:PutItem", "dynamodb:UpdateItem"]
+        Resource = [
+          aws_dynamodb_table.main.arn,
+          "${aws_dynamodb_table.main.arn}/index/*",
+        ]
+      },
+    ]
+  })
+}
+
 # =============================================================================
 # Role ARN maps (referenced by lambda_go.tf and lambda_python.tf)
 # =============================================================================
@@ -494,8 +536,9 @@ locals {
   }
 
   python_lambda_roles = {
-    "custom-evaluator" = aws_iam_role.custom_evaluator.arn
-    "ingest-gharchive" = aws_iam_role.ingest["ingest-gharchive"].arn
-    "ingest-openmeteo" = aws_iam_role.ingest["ingest-openmeteo"].arn
+    "custom-evaluator"  = aws_iam_role.custom_evaluator.arn
+    "ingest-earthquake" = aws_iam_role.ingest["ingest-earthquake"].arn
+    "ingest-crypto"     = aws_iam_role.ingest["ingest-crypto"].arn
+    "pipeline-monitor"  = aws_iam_role.pipeline_monitor.arn
   }
 }

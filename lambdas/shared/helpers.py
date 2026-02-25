@@ -1,4 +1,4 @@
-"""Shared helpers for ingestion Lambdas: dedup, MARKER writing, S3 upload."""
+"""Shared helpers for ingestion Lambdas: dedup, MARKER writing, S3 upload, observability."""
 
 import hashlib
 import json
@@ -109,6 +109,62 @@ def write_marker(
         },
     )
     logger.info("wrote MARKER for %s schedule=%s", pipeline_id, schedule_id)
+
+
+def check_chaos_block(table_name: str, pipeline_id: str) -> bool:
+    """Check if a chaos eval-block record exists for this pipeline.
+
+    Returns True if blocked (chaos active), False otherwise.
+    """
+    pk = f"CHAOS#BLOCK#{pipeline_id}"
+    try:
+        resp = ddb.get_item(
+            TableName=table_name,
+            Key={"PK": {"S": pk}, "SK": {"S": "ACTIVE"}},
+        )
+        if "Item" in resp:
+            logger.warning("chaos block active for pipeline %s", pipeline_id)
+            return True
+    except ClientError:
+        logger.exception("error checking chaos block for %s", pipeline_id)
+    return False
+
+
+def write_observability_record(
+    table_name: str,
+    record_type: str,
+    pipeline_id: str,
+    sk_suffix: str,
+    gsi1pk: str,
+    gsi1sk: str,
+    fields: dict,
+    ttl_days: int = 30,
+):
+    """Write a generic observability record (JOBLOG, EVAL, ERROR, CONTROL) to DynamoDB."""
+    now = datetime.now(timezone.utc)
+    ttl = int(now.timestamp()) + (ttl_days * 86400)
+
+    item = {
+        "PK": {"S": f"{record_type}#{pipeline_id}"},
+        "SK": {"S": sk_suffix},
+        "GSI1PK": {"S": gsi1pk},
+        "GSI1SK": {"S": gsi1sk},
+        "createdAt": {"S": now.isoformat()},
+        "ttl": {"N": str(ttl)},
+    }
+
+    for k, v in fields.items():
+        if isinstance(v, bool):
+            item[k] = {"BOOL": v}
+        elif isinstance(v, (int, float)):
+            item[k] = {"N": str(v)}
+        elif isinstance(v, dict):
+            item[k] = {"S": json.dumps(v)}
+        elif v is not None:
+            item[k] = {"S": str(v)}
+
+    ddb.put_item(TableName=table_name, Item=item)
+    logger.info("wrote %s record for %s", record_type, pipeline_id)
 
 
 class HourTracker:
