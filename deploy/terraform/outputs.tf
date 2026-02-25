@@ -27,3 +27,13 @@ output "chaos_enabled" {
   description = "Whether chaos testing is enabled"
   value       = var.chaos_enabled
 }
+
+output "dashboard_url" {
+  description = "CloudFront URL for the pipeline dashboard"
+  value       = "https://${aws_cloudfront_distribution.dashboard.domain_name}"
+}
+
+output "dashboard_bucket" {
+  description = "S3 bucket for dashboard static site"
+  value       = aws_s3_bucket.dashboard.id
+}

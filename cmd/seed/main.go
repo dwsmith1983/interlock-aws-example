@@ -40,9 +40,9 @@ type traitOverride struct {
 
 // chaosConfig is the on-disk YAML format for chaos scenarios.
 type chaosConfig struct {
-	Enabled   bool                     `yaml:"enabled"`
-	Severity  string                   `yaml:"severity"`
-	Scenarios []map[string]interface{} `yaml:"scenarios"`
+	Enabled   bool                     `yaml:"enabled" json:"enabled"`
+	Severity  string                   `yaml:"severity" json:"severity"`
+	Scenarios []map[string]interface{} `yaml:"scenarios" json:"scenarios"`
 }
 
 func generateHourlySchedules() []types.ScheduleConfig {

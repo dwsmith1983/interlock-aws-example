@@ -523,6 +523,39 @@ resource "aws_iam_role_policy" "pipeline_monitor" {
   })
 }
 
+# --- dashboard-api: DynamoDB Read-Only ---
+resource "aws_iam_role" "dashboard_api" {
+  name               = "${var.table_name}-dashboard-api"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "dashboard_api_basic" {
+  role       = aws_iam_role.dashboard_api.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "dashboard_api" {
+  name = "dashboard-api-policy"
+  role = aws_iam_role.dashboard_api.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "DynamoDBReadOnly"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan",
+        "dynamodb:BatchGetItem", "dynamodb:ConditionCheckItem",
+        "dynamodb:DescribeTable",
+      ]
+      Resource = [
+        aws_dynamodb_table.main.arn,
+        "${aws_dynamodb_table.main.arn}/index/*",
+      ]
+    }]
+  })
+}
+
 # =============================================================================
 # Role ARN maps (referenced by lambda_go.tf and lambda_python.tf)
 # =============================================================================
@@ -540,5 +573,6 @@ locals {
     "ingest-earthquake" = aws_iam_role.ingest["ingest-earthquake"].arn
     "ingest-crypto"     = aws_iam_role.ingest["ingest-crypto"].arn
     "pipeline-monitor"  = aws_iam_role.pipeline_monitor.arn
+    "dashboard-api"     = aws_iam_role.dashboard_api.arn
   }
 }
