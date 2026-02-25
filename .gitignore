@@ -25,6 +25,11 @@ __pycache__/
 # E2E results
 e2e/results/
 
+# Go workspace (local dev only)
+go.work
+go.work.sum
+
 # IDE
 .idea/
 .vscode/
+.claude

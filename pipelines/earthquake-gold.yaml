@@ -1,0 +1,33 @@
+id: earthquake-gold
+name: Earthquake Gold ETL
+description: Aggregate silver earthquake data into gold analytics tables (hourly/daily/magnitude/geographic)
+archetype: gold-etl
+
+traits:
+  - type: upstream-dependency
+    evaluator: evaluate/upstream-dependency
+    config:
+      tableName: "${TABLE_NAME}"
+      upstreamPipeline: earthquake-silver
+  - type: record-count
+    evaluator: evaluate/record-count
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "silver/earthquake/"
+      minObjects: 1
+      dateOnly: true
+
+trigger:
+  type: glue
+  jobName: medallion-gold-earthquake
+  arguments:
+    "--source": earthquake
+    "--tier": gold
+    "--bucket": "${BUCKET_NAME}"
+    "--table_name": "${TABLE_NAME}"
+    "--par_day": "${date}"
+    "--par_hour": "${hour}"
+
+sla:
+  evaluationDeadlineMinutes: 40
+  completionDeadlineMinutes: 55

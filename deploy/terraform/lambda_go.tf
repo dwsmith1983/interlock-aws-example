@@ -68,9 +68,12 @@ resource "aws_lambda_function" "stream_router" {
   source_code_hash = data.archive_file.stream_router.output_base64sha256
 
   environment {
-    variables = {
-      STATE_MACHINE_ARN = aws_sfn_state_machine.pipeline.arn
-    }
+    variables = merge(
+      local.go_lambda_common_env,
+      {
+        STATE_MACHINE_ARN = aws_sfn_state_machine.pipeline.arn
+      }
+    )
   }
 
   depends_on = [aws_cloudwatch_log_group.stream_router]

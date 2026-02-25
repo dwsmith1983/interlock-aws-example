@@ -1,0 +1,33 @@
+id: crypto-gold
+name: Crypto Gold ETL
+description: Aggregate silver crypto data into gold analytics tables (daily market + top movers)
+archetype: gold-etl
+
+traits:
+  - type: upstream-dependency
+    evaluator: evaluate/upstream-dependency
+    config:
+      tableName: "${TABLE_NAME}"
+      upstreamPipeline: crypto-silver
+  - type: record-count
+    evaluator: evaluate/record-count
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "silver/crypto/"
+      minObjects: 1
+      dateOnly: true
+
+trigger:
+  type: glue
+  jobName: medallion-gold-crypto
+  arguments:
+    "--source": crypto
+    "--tier": gold
+    "--bucket": "${BUCKET_NAME}"
+    "--table_name": "${TABLE_NAME}"
+    "--par_day": "${date}"
+    "--par_hour": "${hour}"
+
+sla:
+  evaluationDeadlineMinutes: 40
+  completionDeadlineMinutes: 55

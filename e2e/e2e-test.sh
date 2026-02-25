@@ -5,7 +5,7 @@ set -euo pipefail
 # Validates the full pipeline: ingestion → interlock → Glue → Delta
 #
 # Prerequisites:
-#   - CDK stack deployed (MedallionPipelineStack)
+#   - Terraform stack deployed
 #   - Pipelines seeded (make seed)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,12 +15,12 @@ LOG_FILE="$RESULTS_DIR/e2e-$(date +%Y%m%d-%H%M%S).log"
 
 # Read stack outputs
 TABLE_NAME="${TABLE_NAME:-medallion-interlock}"
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-ap-southeast-1}"
 BUCKET_NAME="${BUCKET_NAME:-}"
 
 if [ -z "$BUCKET_NAME" ]; then
   ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-  BUCKET_NAME="medallion-data-${ACCOUNT_ID}"
+  BUCKET_NAME="${TABLE_NAME}-data-${ACCOUNT_ID}"
 fi
 
 PASS_COUNT=0
@@ -71,7 +71,7 @@ wait_for_runlog() {
   local schedule="$2"
   local max_wait="${3:-300}"
   local elapsed=0
-  local date_str=$(date -u +%Y-%m-%d)
+  local date_str=$(date -u +%Y%m%d)
 
   while [ $elapsed -lt $max_wait ]; do
     item=$(aws dynamodb get-item \
@@ -88,90 +88,91 @@ wait_for_runlog() {
 }
 
 # =============================================================================
-# Scenario 1: Manual ingestion trigger → bronze data appears in S3
+# Scenario 1: Earthquake ingestion → bronze data appears in S3
 # =============================================================================
-scenario_1_manual_ingestion() {
-  log "--- Scenario 1: Manual ingestion trigger ---"
-  local date_str=$(date -u +%Y-%m-%d)
+scenario_1_earthquake_ingestion() {
+  log "--- Scenario 1: Earthquake ingestion ---"
+  local date_str=$(date -u +%Y%m%d)
   local hour=$(date -u +%H)
 
-  # Trigger Wikipedia ingestion manually
-  log "Invoking ingest-wikipedia Lambda..."
+  log "Invoking ingest-earthquake Lambda..."
   aws lambda invoke \
-    --function-name "${TABLE_NAME}-ingest-wikipedia" \
+    --function-name "${TABLE_NAME}-ingest-earthquake" \
     --region "$REGION" \
     --payload '{}' \
-    "$RESULTS_DIR/ingest-wikipedia-response.json" >/dev/null 2>&1
+    "$RESULTS_DIR/earthquake-response.json" >/dev/null 2>&1
 
   local resp
-  resp=$(cat "$RESULTS_DIR/ingest-wikipedia-response.json")
-  if echo "$resp" | grep -q "s3_uri"; then
-    pass "Wikipedia ingestion wrote data to S3"
+  resp=$(cat "$RESULTS_DIR/earthquake-response.json")
+  if echo "$resp" | grep -q "eventCount"; then
+    pass "Earthquake ingestion completed"
+    log "Response: $resp"
   else
-    fail "Wikipedia ingestion did not write data"
+    fail "Earthquake ingestion did not return expected response"
     log "Response: $resp"
   fi
 
   # Check S3 for bronze data
-  if wait_for_s3_object "bronze/wikipedia/dt=${date_str}/hh=${hour}/" 30; then
-    pass "Bronze Wikipedia data exists in S3"
+  if wait_for_s3_object "bronze/earthquake/par_day=${date_str}/par_hour=${hour}/" 30; then
+    pass "Bronze earthquake data exists in S3"
   else
-    fail "Bronze Wikipedia data not found in S3"
+    fail "Bronze earthquake data not found in S3"
   fi
 }
 
 # =============================================================================
-# Scenario 2: Dedup — second invocation should be skipped
+# Scenario 2: Crypto ingestion → bronze data appears in S3
 # =============================================================================
-scenario_2_dedup() {
-  log "--- Scenario 2: Ingestion dedup ---"
+scenario_2_crypto_ingestion() {
+  log "--- Scenario 2: Crypto ingestion ---"
+  local date_str=$(date -u +%Y%m%d)
+  local hour=$(date -u +%H)
 
-  # Invoke GH Archive twice in quick succession
-  log "First GH Archive invocation..."
+  log "Invoking ingest-crypto Lambda..."
   aws lambda invoke \
-    --function-name "${TABLE_NAME}-ingest-gharchive" \
+    --function-name "${TABLE_NAME}-ingest-crypto" \
     --region "$REGION" \
     --payload '{}' \
-    "$RESULTS_DIR/gharchive-response-1.json" >/dev/null 2>&1
+    "$RESULTS_DIR/crypto-response.json" >/dev/null 2>&1
 
-  log "Second GH Archive invocation (should dedup)..."
+  local resp
+  resp=$(cat "$RESULTS_DIR/crypto-response.json")
+  if echo "$resp" | grep -q "tickerCount"; then
+    pass "Crypto ingestion completed"
+    log "Response: $resp"
+  else
+    fail "Crypto ingestion did not return expected response"
+    log "Response: $resp"
+  fi
+
+  # Check S3 for bronze data
+  if wait_for_s3_object "bronze/crypto/par_day=${date_str}/par_hour=${hour}/" 30; then
+    pass "Bronze crypto data exists in S3"
+  else
+    fail "Bronze crypto data not found in S3"
+  fi
+}
+
+# =============================================================================
+# Scenario 3: Dedup — second invocation should be skipped
+# =============================================================================
+scenario_3_dedup() {
+  log "--- Scenario 3: Ingestion dedup ---"
+
+  log "Second crypto invocation (should dedup)..."
   aws lambda invoke \
-    --function-name "${TABLE_NAME}-ingest-gharchive" \
+    --function-name "${TABLE_NAME}-ingest-crypto" \
     --region "$REGION" \
     --payload '{}' \
-    "$RESULTS_DIR/gharchive-response-2.json" >/dev/null 2>&1
+    "$RESULTS_DIR/crypto-response-2.json" >/dev/null 2>&1
 
   local resp2
-  resp2=$(cat "$RESULTS_DIR/gharchive-response-2.json")
+  resp2=$(cat "$RESULTS_DIR/crypto-response-2.json")
   if echo "$resp2" | grep -q "duplicate"; then
     pass "Second invocation correctly detected as duplicate"
   else
-    warn "Second invocation did not report duplicate (may be different hour)"
+    warn "Second invocation did not report duplicate (may have different content)"
     log "Response: $resp2"
-  fi
-}
-
-# =============================================================================
-# Scenario 3: Open-Meteo ingestion → bronze data
-# =============================================================================
-scenario_3_openmeteo() {
-  log "--- Scenario 3: Open-Meteo ingestion ---"
-  local date_str=$(date -u +%Y-%m-%d)
-  local hour=$(date -u +%H)
-
-  aws lambda invoke \
-    --function-name "${TABLE_NAME}-ingest-openmeteo" \
-    --region "$REGION" \
-    --payload '{}' \
-    "$RESULTS_DIR/openmeteo-response.json" >/dev/null 2>&1
-
-  local resp
-  resp=$(cat "$RESULTS_DIR/openmeteo-response.json")
-  if echo "$resp" | grep -q "s3_uri"; then
-    pass "Open-Meteo ingestion wrote data to S3"
-  else
-    fail "Open-Meteo ingestion did not write data"
-    log "Response: $resp"
   fi
 }
 
@@ -180,66 +181,61 @@ scenario_3_openmeteo() {
 # =============================================================================
 scenario_4_step_function() {
   log "--- Scenario 4: MARKER → Step Function execution ---"
-  local date_str=$(date -u +%Y-%m-%d)
   local hour=$(date -u +%H)
   local schedule_id="h${hour}"
 
-  # Write a test MARKER
+  # Write a test MARKER for earthquake-silver
   local ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local ttl=$(( $(date +%s) + 86400 ))
   aws dynamodb put-item \
     --table-name "$TABLE_NAME" \
     --region "$REGION" \
     --item "{
-      \"PK\":{\"S\":\"PIPELINE#wikipedia-silver\"},
+      \"PK\":{\"S\":\"PIPELINE#earthquake-silver\"},
       \"SK\":{\"S\":\"MARKER#test-e2e#${ts}\"},
       \"scheduleID\":{\"S\":\"${schedule_id}\"},
       \"timestamp\":{\"S\":\"${ts}\"},
       \"ttl\":{\"N\":\"${ttl}\"}
     }" >/dev/null 2>&1
 
-  # Wait a moment for stream processing
+  # Wait for stream processing
   sleep 10
 
-  # Check for Step Function execution
+  # Check for Step Function execution via Terraform outputs
   local sfn_arn
-  sfn_arn=$(aws cloudformation describe-stacks \
-    --stack-name MedallionPipelineStack \
-    --query "Stacks[0].Outputs[?OutputKey=='StateMachineArn'].OutputValue" \
-    --output text --region "$REGION" 2>/dev/null || echo "")
+  sfn_arn=$(cd "$(dirname "$0")/../deploy/terraform" && terraform output -raw state_machine_arn 2>/dev/null || echo "")
 
   if [ -z "$sfn_arn" ]; then
-    warn "Could not find StateMachineArn from stack outputs"
+    warn "Could not find state_machine_arn from Terraform outputs"
     return
   fi
 
   local executions
   executions=$(aws stepfunctions list-executions \
     --state-machine-arn "$sfn_arn" \
-    --max-results 5 \
+    --max-results 10 \
     --region "$REGION" 2>/dev/null || echo "")
 
-  if echo "$executions" | grep -q "wikipedia-silver"; then
-    pass "Step Function execution started for wikipedia-silver"
+  if echo "$executions" | grep -q "earthquake-silver"; then
+    pass "Step Function execution started for earthquake-silver"
   else
-    warn "No Step Function execution found (may take longer to process)"
+    warn "No Step Function execution found for earthquake-silver (may take longer)"
   fi
 }
 
 # =============================================================================
-# Scenario 5: Full silver pipeline completion (if data exists)
+# Scenario 5: Silver pipeline completion
 # =============================================================================
 scenario_5_silver_pipeline() {
   log "--- Scenario 5: Silver pipeline completion check ---"
   local hour=$(date -u +%H)
-  local prev_hour=$(printf "%02d" $(( (10#$hour - 1 + 24) % 24 )))
-  local schedule_id="h${prev_hour}"
+  local schedule_id="h${hour}"
 
-  log "Checking if silver pipeline completed for schedule ${schedule_id}..."
-  if wait_for_runlog "wikipedia-silver" "$schedule_id" 60; then
-    pass "Wikipedia silver pipeline completed for ${schedule_id}"
+  log "Checking if earthquake-silver completed for schedule ${schedule_id}..."
+  if wait_for_runlog "earthquake-silver" "$schedule_id" 300; then
+    pass "Earthquake silver pipeline completed for ${schedule_id}"
   else
-    warn "Wikipedia silver pipeline not yet completed for ${schedule_id} (expected if first run)"
+    warn "Earthquake silver pipeline not yet completed for ${schedule_id} (expected if first run)"
   fi
 }
 
@@ -250,20 +246,17 @@ scenario_6_evaluator() {
   log "--- Scenario 6: Custom evaluator endpoint ---"
 
   local api_url
-  api_url=$(aws cloudformation describe-stacks \
-    --stack-name MedallionPipelineStack \
-    --query "Stacks[0].Outputs[?OutputKey=='EvaluatorApiUrl'].OutputValue" \
-    --output text --region "$REGION" 2>/dev/null || echo "")
+  api_url=$(cd "$(dirname "$0")/../deploy/terraform" && terraform output -raw evaluator_api_url 2>/dev/null || echo "")
 
   if [ -z "$api_url" ]; then
-    warn "Could not find EvaluatorApiUrl from stack outputs"
+    warn "Could not find evaluator_api_url from Terraform outputs"
     return
   fi
 
   local resp
   resp=$(curl -s -X POST "${api_url}/evaluate/record-count" \
     -H "Content-Type: application/json" \
-    -d "{\"bucket\":\"${BUCKET_NAME}\",\"prefix\":\"bronze/wikipedia/\",\"minObjects\":1}" 2>/dev/null || echo "")
+    -d "{\"bucket\":\"${BUCKET_NAME}\",\"prefix\":\"bronze/earthquake/\",\"minObjects\":1}" 2>/dev/null || echo "")
 
   if echo "$resp" | grep -qE "PASS|FAIL"; then
     pass "Custom evaluator responded with valid status"
@@ -271,6 +264,58 @@ scenario_6_evaluator() {
   else
     fail "Custom evaluator returned unexpected response"
     log "Response: $resp"
+  fi
+}
+
+# =============================================================================
+# Scenario 7: Chaos events tracking (if chaos enabled)
+# =============================================================================
+scenario_7_chaos() {
+  log "--- Scenario 7: Chaos events tracking ---"
+
+  local config
+  config=$(aws dynamodb get-item \
+    --table-name "$TABLE_NAME" \
+    --key '{"PK":{"S":"CHAOS#CONFIG"},"SK":{"S":"CURRENT"}}' \
+    --region "$REGION" 2>/dev/null || echo "")
+
+  if [ -z "$config" ] || ! echo "$config" | grep -q "enabled"; then
+    warn "No CHAOS#CONFIG found, skipping chaos validation"
+    return
+  fi
+
+  # Check for any chaos events
+  local events
+  events=$(aws dynamodb query \
+    --table-name "$TABLE_NAME" \
+    --key-condition-expression "PK = :pk" \
+    --expression-attribute-values '{":pk":{"S":"CHAOS#EVENTS"}}' \
+    --region "$REGION" \
+    --query 'Count' \
+    --output text 2>/dev/null || echo "0")
+
+  if [ "$events" != "0" ]; then
+    log "Found ${events} chaos events"
+
+    # Check for UNRECOVERED events (findings!)
+    local unrecovered
+    unrecovered=$(aws dynamodb query \
+      --table-name "$TABLE_NAME" \
+      --key-condition-expression "PK = :pk" \
+      --filter-expression "#s = :status" \
+      --expression-attribute-names '{"#s":"status"}' \
+      --expression-attribute-values '{":pk":{"S":"CHAOS#EVENTS"},":status":{"S":"UNRECOVERED"}}' \
+      --region "$REGION" \
+      --query 'Count' \
+      --output text 2>/dev/null || echo "0")
+
+    if [ "$unrecovered" != "0" ]; then
+      fail "Found ${unrecovered} UNRECOVERED chaos events (safety gaps to investigate!)"
+    else
+      pass "All chaos events recovered (no safety gaps found)"
+    fi
+  else
+    warn "No chaos events found (chaos may not be enabled)"
   fi
 }
 
@@ -286,12 +331,13 @@ main() {
   log "Region: $REGION"
   log ""
 
-  scenario_1_manual_ingestion
-  scenario_2_dedup
-  scenario_3_openmeteo
+  scenario_1_earthquake_ingestion
+  scenario_2_crypto_ingestion
+  scenario_3_dedup
   scenario_4_step_function
   scenario_5_silver_pipeline
   scenario_6_evaluator
+  scenario_7_chaos
 
   log ""
   log "=========================================="

@@ -19,27 +19,48 @@ LAMBDAS=(
 INTERLOCK_VERSION="${INTERLOCK_VERSION:-v0.1.1}"
 INTERLOCK_MODULE="github.com/dwsmith1983/interlock"
 
-echo "Fetching interlock@${INTERLOCK_VERSION} source..."
-INTERLOCK_DIR="$(go env GOMODCACHE)/${INTERLOCK_MODULE}@${INTERLOCK_VERSION}"
-if [ ! -d "$INTERLOCK_DIR" ]; then
-  go install "${INTERLOCK_MODULE}/cmd/lambda/stream-router@${INTERLOCK_VERSION}" 2>/dev/null || true
+# Detect go.work for local interlock development
+if [ -f "$PROJECT_ROOT/go.work" ]; then
+  echo "Detected go.work — building from local workspace..."
+  INTERLOCK_SRC="$PROJECT_ROOT/../interlock"
+  if [ ! -d "$INTERLOCK_SRC" ]; then
+    echo "ERROR: go.work present but ../interlock directory not found"
+    exit 1
+  fi
+
+  echo "Building interlock Lambda binaries (workspace mode)..."
+  mkdir -p "$LAMBDA_DIR"
+
+  for name in "${LAMBDAS[@]}"; do
+    echo "  Building $name..."
+    (cd "$PROJECT_ROOT" && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+      go build -tags lambda.norpc \
+      -o "$LAMBDA_DIR/$name/bootstrap" \
+      "${INTERLOCK_MODULE}/cmd/lambda/$name")
+  done
+else
+  echo "Fetching interlock@${INTERLOCK_VERSION} source..."
+  INTERLOCK_DIR="$(go env GOMODCACHE)/${INTERLOCK_MODULE}@${INTERLOCK_VERSION}"
+  if [ ! -d "$INTERLOCK_DIR" ]; then
+    go install "${INTERLOCK_MODULE}/cmd/lambda/stream-router@${INTERLOCK_VERSION}" 2>/dev/null || true
+  fi
+  # Module cache is read-only; copy to a writable temp dir for build output
+  INTERLOCK_BUILD="$(mktemp -d)"
+  trap 'rm -rf "$INTERLOCK_BUILD"' EXIT
+  cp -r "$INTERLOCK_DIR" "$INTERLOCK_BUILD/interlock"
+  chmod -R u+w "$INTERLOCK_BUILD/interlock"
+
+  echo "Building interlock Lambda binaries..."
+  mkdir -p "$LAMBDA_DIR"
+
+  for name in "${LAMBDAS[@]}"; do
+    echo "  Building $name..."
+    (cd "$INTERLOCK_BUILD/interlock" && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+      go build -tags lambda.norpc \
+      -o "$LAMBDA_DIR/$name/bootstrap" \
+      "./cmd/lambda/$name")
+  done
 fi
-# Module cache is read-only; copy to a writable temp dir for build output
-INTERLOCK_BUILD="$(mktemp -d)"
-trap 'rm -rf "$INTERLOCK_BUILD"' EXIT
-cp -r "$INTERLOCK_DIR" "$INTERLOCK_BUILD/interlock"
-chmod -R u+w "$INTERLOCK_BUILD/interlock"
-
-echo "Building interlock Lambda binaries..."
-mkdir -p "$LAMBDA_DIR"
-
-for name in "${LAMBDAS[@]}"; do
-  echo "  Building $name..."
-  (cd "$INTERLOCK_BUILD/interlock" && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
-    go build -tags lambda.norpc \
-    -o "$LAMBDA_DIR/$name/bootstrap" \
-    "./cmd/lambda/$name")
-done
 
 echo "All Lambda binaries built to $LAMBDA_DIR"
 

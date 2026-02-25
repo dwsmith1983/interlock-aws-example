@@ -22,3 +22,8 @@ output "evaluator_api_url" {
   description = "API Gateway URL for the custom evaluator"
   value       = "https://${aws_apigatewayv2_api.evaluator.id}.execute-api.${data.aws_region.current.name}.amazonaws.com"
 }
+
+output "chaos_enabled" {
+  description = "Whether chaos testing is enabled"
+  value       = var.chaos_enabled
+}

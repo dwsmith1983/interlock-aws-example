@@ -45,22 +45,23 @@ locals {
   }
 
   python_lambdas = {
-    "custom-evaluator" = { source_dir = "evaluator", timeout = 30 }
-    "ingest-gharchive" = { source_dir = "ingest_gharchive", timeout = 300 }
-    "ingest-openmeteo" = { source_dir = "ingest_openmeteo", timeout = 60 }
+    "custom-evaluator"   = { source_dir = "evaluator", timeout = 30 }
+    "ingest-earthquake"  = { source_dir = "ingest_earthquake", timeout = 60 }
+    "ingest-crypto"      = { source_dir = "ingest_crypto", timeout = 60 }
+    "pipeline-monitor"   = { source_dir = "pipeline_monitor", timeout = 60 }
   }
 
   glue_jobs = {
-    "medallion-silver-gharchive" = "silver_gharchive.py"
-    "medallion-silver-openmeteo" = "silver_openmeteo.py"
-    "medallion-gold-gharchive"   = "gold_gharchive.py"
-    "medallion-gold-openmeteo"   = "gold_openmeteo.py"
+    "medallion-silver-earthquake" = "silver_earthquake.py"
+    "medallion-silver-crypto"     = "silver_crypto.py"
+    "medallion-gold-earthquake"   = "gold_earthquake.py"
+    "medallion-gold-crypto"       = "gold_crypto.py"
   }
 
   eventbridge_rules = {
-    "ingest-gharchive" = { rate_minutes = var.gharchive_rate_minutes }
-    "ingest-openmeteo" = { rate_minutes = var.openmeteo_rate_minutes }
+    "ingest-earthquake" = { rate_minutes = var.earthquake_rate_minutes }
+    "ingest-crypto"     = { rate_minutes = var.crypto_rate_minutes }
   }
 
-  ingest_lambda_names = toset(["ingest-gharchive", "ingest-openmeteo"])
+  ingest_lambda_names = toset(["ingest-earthquake", "ingest-crypto"])
 }

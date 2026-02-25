@@ -1,0 +1,33 @@
+id: earthquake-silver
+name: Earthquake Silver ETL
+description: Transform raw USGS earthquake bronze data into curated silver Delta table
+archetype: silver-etl
+
+traits:
+  - type: source-freshness
+    evaluator: evaluate/source-freshness
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "bronze/earthquake/"
+      maxAgeSeconds: 86400
+  - type: record-count
+    evaluator: evaluate/record-count
+    config:
+      bucket: "${BUCKET_NAME}"
+      prefix: "bronze/earthquake/"
+      minObjects: 1
+
+trigger:
+  type: glue
+  jobName: medallion-silver-earthquake
+  arguments:
+    "--source": earthquake
+    "--tier": silver
+    "--bucket": "${BUCKET_NAME}"
+    "--table_name": "${TABLE_NAME}"
+    "--par_day": "${date}"
+    "--par_hour": "${hour}"
+
+sla:
+  evaluationDeadlineMinutes: 20
+  completionDeadlineMinutes: 35
