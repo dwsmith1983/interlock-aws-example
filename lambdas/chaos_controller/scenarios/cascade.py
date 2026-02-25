@@ -45,8 +45,14 @@ def burst_markers(ctx):
     table = ctx["table_name"]
     pipeline_id = ctx["pipeline_id"]
     now = ctx["now"]
+    date = now.strftime("%Y%m%d")
     hour = now.strftime("%H")
     schedule_id = f"h{hour}"
+
+    # Only inject if there's an active run for this schedule
+    if not _has_active_run(table, pipeline_id, date, schedule_id):
+        logger.info("no active run for %s/%s, skipping burst-markers", pipeline_id, schedule_id)
+        return {"skipped": True, "reason": "no active data"}
 
     for i in range(5):
         _write_marker(table, pipeline_id, schedule_id, now, suffix=f"burst{i}")
@@ -148,6 +154,22 @@ def orphan_marker(ctx):
     _write_marker(table, fake_pipeline, schedule_id, now)
     logger.info("wrote orphan MARKER for %s/%s", fake_pipeline, schedule_id)
     return {"action": "orphan_marker", "pipeline": fake_pipeline, "schedule": schedule_id}
+
+
+def _has_active_run(table, pipeline_id, date, schedule_id):
+    """Check if there's a RUNLOG entry for this pipeline/schedule today."""
+    pk = f"PIPELINE#{pipeline_id}"
+    sk = f"RUNLOG#{date}#{schedule_id}"
+    try:
+        resp = ddb.get_item(
+            TableName=table,
+            Key={"PK": {"S": pk}, "SK": {"S": sk}},
+            ProjectionExpression="PK",
+        )
+        return "Item" in resp
+    except Exception:
+        logger.exception("error checking active run for %s/%s", pipeline_id, schedule_id)
+        return False
 
 
 def _write_marker(table, pipeline_id, schedule_id, now, suffix=""):
