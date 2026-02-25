@@ -34,7 +34,6 @@ SCENARIO_REGISTRY = {
     "lambda-throttle": infrastructure.lambda_throttle,
     "lambda-throttle-ingest": infrastructure.lambda_throttle_ingest,
     # Category 2: Data plane
-    "delete-bronze": data_plane.delete_bronze,
     "corrupt-bronze": data_plane.corrupt_bronze,
     "empty-bronze": data_plane.empty_bronze,
     "glue-kill": data_plane.glue_kill,
@@ -42,20 +41,16 @@ SCENARIO_REGISTRY = {
     # Category 3: Control plane
     "delete-lock": control_plane.delete_lock,
     "corrupt-runlog": control_plane.corrupt_runlog,
-    "delete-config": control_plane.delete_config,
     "cas-conflict": control_plane.cas_conflict,
     "corrupt-runlog-json": control_plane.corrupt_runlog_json,
     # Category 4: Cascade
     "dup-marker": cascade.dup_marker,
     "burst-markers": cascade.burst_markers,
-    "future-marker": cascade.future_marker,
     "late-data": cascade.late_data,
-    "delete-upstream-runlog": cascade.delete_upstream_runlog,
     "orphan-marker": cascade.orphan_marker,
     # Category 5: Evaluator
     "eval-block": evaluator.eval_block,
     "eval-slow": evaluator.eval_slow,
-    "eval-false-pass": evaluator.eval_false_pass,
     "dup-data": evaluator.dup_data,
 }
 

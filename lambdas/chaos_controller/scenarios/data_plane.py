@@ -1,7 +1,6 @@
-"""Category 2: Data Plane Chaos — corrupting/removing S3 data.
+"""Category 2: Data Plane Chaos — corrupting S3 data and killing jobs.
 
 Scenarios:
-- delete-bronze: Delete a recent bronze S3 object
 - corrupt-bronze: Overwrite a bronze file with invalid JSON
 - empty-bronze: Write a 0-byte file to bronze partition
 - glue-kill: Stop a running Glue job mid-execution (partial write)
@@ -21,24 +20,6 @@ s3 = boto3.client("s3")
 glue = boto3.client("glue")
 
 SOURCES = ["earthquake", "crypto"]
-
-
-def delete_bronze(ctx):
-    """Delete a recent bronze S3 object from the current hour."""
-    bucket = ctx["bucket_name"]
-    now = ctx["now"]
-    source = _source_for_pipeline(ctx["pipeline_id"])
-    par_day = now.strftime("%Y%m%d")
-    par_hour = now.strftime("%H")
-
-    prefix = f"bronze/{source}/par_day={par_day}/par_hour={par_hour}/"
-    obj = _pick_random_object(bucket, prefix)
-    if not obj:
-        return {"skipped": True, "reason": f"no objects at {prefix}"}
-
-    s3.delete_object(Bucket=bucket, Key=obj)
-    logger.info("deleted bronze object: s3://%s/%s", bucket, obj)
-    return {"action": "deleted", "key": obj}
 
 
 def corrupt_bronze(ctx):

@@ -3,9 +3,7 @@
 Scenarios:
 - dup-marker: Write identical MARKER twice
 - burst-markers: Write 5 MARKERs for same pipeline/schedule rapidly
-- future-marker: Write MARKER with scheduleID for next hour
 - late-data: Write bronze data with par_hour from 2-3 hours ago + MARKER
-- delete-upstream-runlog: Delete upstream silver RUNLOG before gold evaluates
 - orphan-marker: Write MARKER for nonexistent pipeline
 """
 
@@ -61,19 +59,6 @@ def burst_markers(ctx):
     return {"action": "burst_markers", "pipeline": pipeline_id, "schedule": schedule_id, "count": 5}
 
 
-def future_marker(ctx):
-    """Write MARKER with scheduleID for next hour."""
-    table = ctx["table_name"]
-    pipeline_id = ctx["pipeline_id"]
-    now = ctx["now"]
-    next_hour = (now + timedelta(hours=1)).strftime("%H")
-    schedule_id = f"h{next_hour}"
-
-    _write_marker(table, pipeline_id, schedule_id, now)
-    logger.info("wrote future MARKER for %s/%s", pipeline_id, schedule_id)
-    return {"action": "future_marker", "pipeline": pipeline_id, "schedule": schedule_id}
-
-
 def late_data(ctx):
     """Write bronze data with par_hour from 2-3 hours ago + corresponding MARKER."""
     table = ctx["table_name"]
@@ -111,36 +96,6 @@ def late_data(ctx):
         "schedule": schedule_id,
         "hoursLate": hours_ago,
     }
-
-
-def delete_upstream_runlog(ctx):
-    """Delete upstream silver RUNLOG after silver completes, before gold evaluates."""
-    table = ctx["table_name"]
-    pipeline_id = ctx["pipeline_id"]
-    now = ctx["now"]
-    date = now.strftime("%Y%m%d")
-    hour = now.strftime("%H")
-    schedule_id = f"h{hour}"
-
-    # Determine upstream silver pipeline
-    if "gold" not in pipeline_id:
-        return {"skipped": True, "reason": f"{pipeline_id} is not a gold pipeline"}
-
-    upstream = pipeline_id.replace("-gold", "-silver")
-    pk = f"PIPELINE#{upstream}"
-    sk = f"RUNLOG#{date}#{schedule_id}"
-
-    try:
-        resp = ddb.get_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
-        if "Item" not in resp:
-            return {"skipped": True, "reason": f"no RUNLOG for {upstream}/{schedule_id}"}
-
-        ddb.delete_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
-        logger.info("deleted upstream RUNLOG for %s/%s", upstream, schedule_id)
-        return {"action": "deleted_upstream_runlog", "upstream": upstream, "schedule": schedule_id}
-    except Exception:
-        logger.exception("error deleting upstream RUNLOG")
-        return {"skipped": True, "reason": "error"}
 
 
 def orphan_marker(ctx):
