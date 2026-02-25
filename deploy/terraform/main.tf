@@ -49,6 +49,7 @@ locals {
     "ingest-earthquake"  = { source_dir = "ingest_earthquake", timeout = 60 }
     "ingest-crypto"      = { source_dir = "ingest_crypto", timeout = 60 }
     "pipeline-monitor"   = { source_dir = "pipeline_monitor", timeout = 60 }
+    "dashboard-api"      = { source_dir = "dashboard_api", timeout = 30 }
   }
 
   glue_jobs = {

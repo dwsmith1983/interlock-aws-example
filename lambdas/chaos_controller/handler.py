@@ -78,8 +78,24 @@ def handler(event, context):
     severity_level = config.get("severity", "moderate")
     scenarios = config.get("scenarios", [])
 
+    # Randomize: 40% chance to skip this invocation entirely, and randomize
+    # how many scenarios to attempt (1 to len/3) so chaos is unpredictable.
+    if random.random() < 0.4:
+        logger.info("random skip — no chaos this cycle")
+        recovered, unrecovered = check_recovery(TABLE_NAME, now)
+        return {"statusCode": 200, "body": json.dumps({
+            "injected": [], "recovered": recovered, "unrecovered": unrecovered,
+            "skipped": True,
+        })}
+
+    random.shuffle(scenarios)
+    max_inject = random.randint(1, max(1, len(scenarios) // 3))
+
     injected = []
     for scenario in scenarios:
+        if len(injected) >= max_inject:
+            break
+
         scenario_id = scenario["id"]
         scenario_severity = scenario.get("severity", "moderate")
 
