@@ -40,8 +40,9 @@ locals {
     TABLE_NAME    = aws_dynamodb_table.main.name
     SNS_TOPIC_ARN = aws_sns_topic.alerts.arn
     ARCHETYPE_DIR = "/opt/archetypes"
-    READINESS_TTL = var.readiness_ttl
-    RETENTION_TTL = var.retention_ttl
+    READINESS_TTL             = var.readiness_ttl
+    RETENTION_TTL             = var.retention_ttl
+    CIRCUIT_BREAKER_THRESHOLD = var.circuit_breaker_threshold
   }
 
   python_lambdas = {

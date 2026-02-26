@@ -111,6 +111,29 @@ def write_marker(
     logger.info("wrote MARKER for %s schedule=%s", pipeline_id, schedule_id)
 
 
+def write_sensor_data(table_name: str, pipeline_id: str, sensor_type: str, value: dict):
+    """Write a SENSOR record to DynamoDB for builtin evaluator consumption.
+
+    Key pattern matches the Go provider: PK=PIPELINE#{id}, SK=SENSOR#{type}.
+    """
+    now = datetime.now(timezone.utc)
+    sensor_data = {
+        "pipelineId": pipeline_id,
+        "sensorType": sensor_type,
+        "value": value,
+        "updatedAt": now.isoformat(),
+    }
+    ddb.put_item(
+        TableName=table_name,
+        Item={
+            "PK": {"S": f"PIPELINE#{pipeline_id}"},
+            "SK": {"S": f"SENSOR#{sensor_type}"},
+            "data": {"S": json.dumps(sensor_data)},
+        },
+    )
+    logger.info("wrote SENSOR %s for %s", sensor_type, pipeline_id)
+
+
 def check_chaos_block(table_name: str, pipeline_id: str) -> bool:
     """Check if a chaos eval-block record exists for this pipeline.
 

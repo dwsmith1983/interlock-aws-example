@@ -16,6 +16,16 @@ traits:
       bucket: "${BUCKET_NAME}"
       prefix: "bronze/earthquake/"
       minObjects: 1
+  - type: sensor-freshness
+    evaluator: builtin:sensor-freshness
+    config:
+      sensorType: ingest-freshness
+      maxAge: "30m"
+  - type: data-quality
+    evaluator: builtin:data-quality
+    config:
+      sensorType: ingest-quality
+      maxNullRate: 0.1
 
 trigger:
   type: glue
@@ -29,5 +39,6 @@ trigger:
     "--par_hour": "${hour}"
 
 sla:
-  evaluationDeadlineMinutes: 20
-  completionDeadlineMinutes: 35
+  evaluationDeadline: "+20m"
+  completionDeadline: "+35m"
+  validationTimeout: "+15m"

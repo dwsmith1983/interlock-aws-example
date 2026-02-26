@@ -121,7 +121,6 @@ resource "aws_iam_role_policy" "chaos_controller" {
         Action = [
           "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
           "s3:GetBucketLocation", "s3:ListBucket",
-          "s3:CopyObject",
         ]
         Resource = [
           aws_s3_bucket.data.arn,

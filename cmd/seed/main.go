@@ -29,9 +29,10 @@ type pipelineFile struct {
 	Description string                 `yaml:"description"`
 	Archetype   string                 `yaml:"archetype"`
 	Traits      []traitOverride        `yaml:"traits"`
-	Trigger     *types.TriggerConfig   `yaml:"trigger"`
-	SLA         *types.SLAConfig       `yaml:"sla"`
-	Exclusions  *types.ExclusionConfig `yaml:"exclusions"`
+	Trigger     *types.TriggerConfig       `yaml:"trigger"`
+	SLA         *types.SLAConfig           `yaml:"sla"`
+	Watch       *types.PipelineWatchConfig `yaml:"watch"`
+	Exclusions  *types.ExclusionConfig     `yaml:"exclusions"`
 }
 
 type traitOverride struct {
@@ -104,6 +105,7 @@ func buildConfig(pf *pipelineFile, bucketName, tableName string) types.PipelineC
 		Traits:     traits,
 		Trigger:    pf.Trigger,
 		SLA:        pf.SLA,
+		Watch:      pf.Watch,
 		Schedules:  generateHourlySchedules(),
 		Exclusions: pf.Exclusions,
 	}
@@ -185,6 +187,31 @@ func seedControlRecord(ctx context.Context, client *dynamodb.Client, tableName, 
 	return err
 }
 
+func seedDependencies(ctx context.Context, client *dynamodb.Client, tableName string, configs []types.PipelineConfig) error {
+	for _, cfg := range configs {
+		for _, trait := range cfg.Traits {
+			upstream, _ := trait.Config["upstreamPipeline"].(string)
+			if upstream == "" {
+				continue
+			}
+			pk := "DEP#" + upstream
+			sk := "DEP#" + cfg.Name
+			_, err := client.PutItem(ctx, &dynamodb.PutItemInput{
+				TableName: &tableName,
+				Item: map[string]ddbtypes.AttributeValue{
+					"PK": &ddbtypes.AttributeValueMemberS{Value: pk},
+					"SK": &ddbtypes.AttributeValueMemberS{Value: sk},
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("seeding DEP %s -> %s: %w", upstream, cfg.Name, err)
+			}
+			fmt.Printf("seeded dependency: %s -> %s\n", upstream, cfg.Name)
+		}
+	}
+	return nil
+}
+
 func main() {
 	tableName := flag.String("table", "medallion-interlock", "DynamoDB table name")
 	region := flag.String("region", "us-east-1", "AWS region")
@@ -214,6 +241,7 @@ func main() {
 	}
 
 	ctx := context.Background()
+	var allConfigs []types.PipelineConfig
 	for _, f := range files {
 		pf, err := loadPipeline(f)
 		if err != nil {
@@ -230,9 +258,15 @@ func main() {
 			log.Fatalf("seeding CONTROL record for %s: %v", pf.ID, err)
 		}
 
+		allConfigs = append(allConfigs, cfg)
 		fmt.Printf("registered pipeline %s (%s) with %d schedules\n", pf.ID, pf.Name, len(cfg.Schedules))
 	}
 	fmt.Printf("\nsuccessfully registered %d pipelines\n", len(files))
+
+	// Seed dependency index
+	if err := seedDependencies(ctx, client, *tableName, allConfigs); err != nil {
+		log.Fatalf("seeding dependencies: %v", err)
+	}
 
 	// Seed chaos config
 	if err := seedChaosConfig(ctx, client, *tableName, *chaosPath); err != nil {

@@ -16,6 +16,45 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 ddb = boto3.client("dynamodb")
+lambda_client = boto3.client("lambda")
+
+THROTTLE_SCENARIOS = {"lambda-throttle", "lambda-throttle-ingest"}
+
+
+def restore_expired_throttles(table_name, now):
+    """Restore Lambda concurrency for throttle scenarios past their restoreBy time."""
+    events = _query_unresolved_events(table_name)
+    restored = 0
+    for event in events:
+        scenario = event.get("scenario", {}).get("S", "")
+        if scenario not in THROTTLE_SCENARIOS:
+            continue
+
+        details_str = event.get("details", {}).get("S", "{}")
+        try:
+            details = json.loads(details_str)
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        restore_by_str = details.get("restoreBy", "")
+        function_name = details.get("functionName", "")
+        if not restore_by_str or not function_name:
+            continue
+
+        try:
+            restore_by = datetime.fromisoformat(restore_by_str)
+        except ValueError:
+            continue
+
+        if now >= restore_by:
+            try:
+                lambda_client.delete_function_concurrency(FunctionName=function_name)
+                restored += 1
+                logger.info("restored concurrency for %s (scenario %s)", function_name, scenario)
+            except ClientError:
+                logger.exception("failed to restore concurrency for %s", function_name)
+
+    return restored
 
 
 def check_recovery(table_name, now):
@@ -23,6 +62,9 @@ def check_recovery(table_name, now):
 
     Returns (recovered_count, unrecovered_count).
     """
+    # Restore any expired throttles before checking recovery status
+    restore_expired_throttles(table_name, now)
+
     recovered = 0
     unrecovered = 0
 

@@ -19,7 +19,7 @@ resource "aws_glue_job" "etl" {
     "--datalake-formats" = "delta"
     "--bucket"           = aws_s3_bucket.data.id
     "--table_name"       = aws_dynamodb_table.main.name
-    "--source"           = each.key
-    "--tier"             = "silver"
+    "--source"           = element(split("-", each.key), 2)
+    "--tier"             = element(split("-", each.key), 1)
   }
 }

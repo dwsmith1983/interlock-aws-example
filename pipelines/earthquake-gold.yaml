@@ -5,9 +5,8 @@ archetype: gold-etl
 
 traits:
   - type: upstream-dependency
-    evaluator: evaluate/upstream-dependency
+    evaluator: builtin:upstream-job-log
     config:
-      tableName: "${TABLE_NAME}"
       upstreamPipeline: earthquake-silver
   - type: record-count
     evaluator: evaluate/record-count
@@ -28,6 +27,12 @@ trigger:
     "--par_day": "${date}"
     "--par_hour": "${hour}"
 
+watch:
+  monitoring:
+    enabled: true
+    duration: "20m"
+
 sla:
-  evaluationDeadlineMinutes: 40
-  completionDeadlineMinutes: 55
+  evaluationDeadline: "+40m"
+  completionDeadline: "+55m"
+  validationTimeout: "+35m"
