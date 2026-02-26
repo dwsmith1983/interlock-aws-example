@@ -17,6 +17,7 @@ from shared.helpers import (
     record_dedup,
     upload_to_s3,
     write_marker,
+    write_sensor_data,
 )
 
 logger = logging.getLogger()
@@ -105,9 +106,33 @@ def handler(event, context):
     schedule_id = f"h{par_hour}"
     write_marker(TABLE, f"{SOURCE}-silver", SOURCE, schedule_id)
 
+    # Write sensor data for builtin evaluators
+    quality = _compute_quality_metrics(records)
+    write_sensor_data(TABLE, "crypto-silver", "ingest-freshness", {
+        "lastIngestTime": snapshot_time,
+        "recordCount": len(records),
+    })
+    write_sensor_data(TABLE, "crypto-silver", "ingest-quality", quality)
+
     return {
         "statusCode": 200,
         "body": f"ingested {len(records)} tickers",
         "tickerCount": len(records),
         "uri": uri,
+    }
+
+
+def _compute_quality_metrics(records: list) -> dict:
+    """Compute null rate over key crypto fields."""
+    key_fields = ["coin_id", "symbol", "name", "price_usd", "market_cap_usd", "volume_24h_usd"]
+    if not records:
+        return {"nullRate": 0.0, "schemaDrift": False, "recordCount": 0}
+    total_checks = len(records) * len(key_fields)
+    null_count = sum(
+        1 for r in records for f in key_fields if r.get(f) is None
+    )
+    return {
+        "nullRate": round(null_count / total_checks, 4) if total_checks else 0.0,
+        "schemaDrift": False,
+        "recordCount": len(records),
     }

@@ -21,6 +21,7 @@ from shared.helpers import (
     record_dedup,
     upload_to_s3,
     write_marker,
+    write_sensor_data,
 )
 
 logger = logging.getLogger()
@@ -112,12 +113,41 @@ def handler(event, context):
             write_marker(TABLE, f"{SOURCE}-silver", SOURCE, schedule_id)
             markers_written.add(marker_key)
 
+    # Write sensor data for builtin evaluators
+    if total_events > 0:
+        all_records = []
+        for feats in partitions.values():
+            all_records.extend([_flatten_feature(f) for f in feats])
+        write_sensor_data(TABLE, "earthquake-silver", "ingest-freshness", {
+            "lastIngestTime": now.isoformat(),
+            "recordCount": total_events,
+            "partitions": len(partitions),
+        })
+        quality = _compute_quality_metrics(all_records)
+        write_sensor_data(TABLE, "earthquake-silver", "ingest-quality", quality)
+
     return {
         "statusCode": 200,
         "body": f"ingested {total_events} events across {len(partitions)} partitions",
         "eventCount": total_events,
         "partitions": len(partitions),
         "uris": uris,
+    }
+
+
+def _compute_quality_metrics(records: list) -> dict:
+    """Compute null rate over key earthquake fields."""
+    key_fields = ["earthquake_id", "magnitude", "place", "event_time", "latitude", "longitude"]
+    if not records:
+        return {"nullRate": 0.0, "schemaDrift": False, "recordCount": 0}
+    total_checks = len(records) * len(key_fields)
+    null_count = sum(
+        1 for r in records for f in key_fields if r.get(f) is None
+    )
+    return {
+        "nullRate": round(null_count / total_checks, 4) if total_checks else 0.0,
+        "schemaDrift": False,
+        "recordCount": len(records),
     }
 
 

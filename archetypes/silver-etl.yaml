@@ -15,5 +15,18 @@ requiredTraits:
       minObjects: 1
     defaultTimeout: 30
     defaultTtl: 300
+optionalTraits:
+  - type: sensor-freshness
+    defaultConfig:
+      sensorType: ingest-freshness
+      maxAge: "30m"
+    defaultTimeout: 10
+    defaultTtl: 300
+  - type: data-quality
+    defaultConfig:
+      sensorType: ingest-quality
+      maxNullRate: 0.1
+    defaultTimeout: 10
+    defaultTtl: 300
 readinessRule:
   type: all-required-pass

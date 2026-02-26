@@ -125,6 +125,12 @@ variable "crypto_rate_minutes" {
 }
 
 # Chaos testing
+variable "circuit_breaker_threshold" {
+  description = "Consecutive evaluator failures before circuit breaker opens (empty to disable)"
+  type        = string
+  default     = "5"
+}
+
 variable "chaos_enabled" {
   description = "Enable chaos testing Lambda and EventBridge rule"
   type        = bool
