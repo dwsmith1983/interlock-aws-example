@@ -626,7 +626,53 @@
         }
       },
       "ResultPath": "$.completionSLA",
-      "Next": "LogCompleted",
+      "Next": "IsMonitoringEnabledForLog",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "AlertError"
+        }
+      ]
+    },
+    "IsMonitoringEnabledForLog": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.resolvePipeline.payload.monitoring",
+          "BooleanEquals": true,
+          "Next": "LogCompletedMonitoring"
+        }
+      ],
+      "Default": "LogCompleted"
+    },
+    "LogCompletedMonitoring": {
+      "Type": "Task",
+      "Resource": "${OrchestratorFunctionArn}",
+      "Parameters": {
+        "action": "logResult",
+        "pipelineID.$": "$.pipelineID",
+        "scheduleID.$": "$.scheduleID",
+        "payload": {
+          "status": "COMPLETED_MONITORING",
+          "runID.$": "$.resolvePipeline.payload.runID"
+        }
+      },
+      "ResultPath": "$.logCompleted",
+      "Next": "NotifyDownstream",
       "Retry": [
         {
           "ErrorEquals": [
@@ -893,7 +939,7 @@
         "scheduleID.$": "$.scheduleID"
       },
       "ResultPath": "$.releaseLockSuccess",
-      "Next": "CheckMonitoringEnabled",
+      "Next": "End",
       "Retry": [
         {
           "ErrorEquals": [
@@ -914,195 +960,6 @@
           "Next": "End"
         }
       ]
-    },
-    "CheckMonitoringEnabled": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.resolvePipeline.payload.monitoring",
-          "BooleanEquals": true,
-          "Next": "RecordMonitoringStart"
-        }
-      ],
-      "Default": "End"
-    },
-    "RecordMonitoringStart": {
-      "Type": "Pass",
-      "Parameters": {
-        "monitoringStartedAt.$": "$$.State.EnteredTime"
-      },
-      "ResultPath": "$.monitoringContext",
-      "Next": "WaitMonitorInterval"
-    },
-    "WaitMonitorInterval": {
-      "Type": "Wait",
-      "Seconds": 60,
-      "Next": "ReEvaluateTraitsMonitoring"
-    },
-    "ReEvaluateTraitsMonitoring": {
-      "Type": "Map",
-      "ItemsPath": "$.resolvePipeline.payload.traits",
-      "MaxConcurrency": 0,
-      "ItemProcessor": {
-        "ProcessorConfig": {
-          "Mode": "INLINE"
-        },
-        "StartAt": "EvaluateSingleTraitMonitoring",
-        "States": {
-          "EvaluateSingleTraitMonitoring": {
-            "Type": "Task",
-            "Resource": "${EvaluatorFunctionArn}",
-            "End": true,
-            "Retry": [
-              {
-                "ErrorEquals": [
-                  "Lambda.ServiceException",
-                  "Lambda.AWSLambdaException",
-                  "Lambda.SdkClientException",
-                  "Lambda.TooManyRequestsException"
-                ],
-                "IntervalSeconds": 2,
-                "MaxAttempts": 3,
-                "BackoffRate": 2
-              }
-            ]
-          }
-        }
-      },
-      "ResultPath": "$.monitoringTraitResults",
-      "Next": "CheckReadinessMonitoring",
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.errorInfo",
-          "Next": "End"
-        }
-      ]
-    },
-    "CheckReadinessMonitoring": {
-      "Type": "Task",
-      "Resource": "${OrchestratorFunctionArn}",
-      "Parameters": {
-        "action": "checkReadiness",
-        "pipelineID.$": "$.pipelineID",
-        "scheduleID.$": "$.scheduleID",
-        "payload": {
-          "traitResults.$": "$.monitoringTraitResults"
-        }
-      },
-      "ResultPath": "$.monitoringReadiness",
-      "Next": "IsMonitoringDrift",
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2
-        }
-      ],
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.errorInfo",
-          "Next": "End"
-        }
-      ]
-    },
-    "IsMonitoringDrift": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.monitoringReadiness.result",
-          "StringEquals": "proceed",
-          "Next": "CheckMonitoringExpired"
-        }
-      ],
-      "Default": "HandleLateArrival"
-    },
-    "HandleLateArrival": {
-      "Type": "Task",
-      "Resource": "${OrchestratorFunctionArn}",
-      "Parameters": {
-        "action": "handleLateArrival",
-        "pipelineID.$": "$.pipelineID",
-        "scheduleID.$": "$.scheduleID",
-        "payload": {
-          "runID.$": "$.resolvePipeline.payload.runID",
-          "drifted.$": "$.monitoringReadiness.payload.failedTraits"
-        }
-      },
-      "ResultPath": "$.handleLateArrival",
-      "Next": "CheckMonitoringExpired",
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2
-        }
-      ],
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.errorInfo",
-          "Next": "End"
-        }
-      ]
-    },
-    "CheckMonitoringExpired": {
-      "Type": "Task",
-      "Resource": "${OrchestratorFunctionArn}",
-      "Parameters": {
-        "action": "checkMonitoringExpired",
-        "pipelineID.$": "$.pipelineID",
-        "scheduleID.$": "$.scheduleID",
-        "payload": {
-          "monitoringStartedAt.$": "$.monitoringContext.monitoringStartedAt"
-        }
-      },
-      "ResultPath": "$.monitoringExpiry",
-      "Next": "IsMonitoringExpired",
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2
-        }
-      ],
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.errorInfo",
-          "Next": "End"
-        }
-      ]
-    },
-    "IsMonitoringExpired": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.monitoringExpiry.payload.expired",
-          "BooleanEquals": true,
-          "Next": "End"
-        }
-      ],
-      "Default": "WaitMonitorInterval"
     },
     "End": {
       "Type": "Succeed"
