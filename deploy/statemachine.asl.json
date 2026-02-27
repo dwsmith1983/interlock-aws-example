@@ -262,7 +262,7 @@
         {
           "Variable": "$.validationTimeout.payload.validationTimedOut",
           "BooleanEquals": true,
-          "Next": "LogNotReady"
+          "Next": "LogValidationTimeout"
         }
       ],
       "Default": "CheckEvaluationSLA"
@@ -346,7 +346,7 @@
       ],
       "Default": "CheckEvalSLAForPoll"
     },
-    "LogNotReady": {
+    "LogValidationTimeout": {
       "Type": "Task",
       "Resource": "${OrchestratorFunctionArn}",
       "Parameters": {
@@ -354,12 +354,13 @@
         "pipelineID.$": "$.pipelineID",
         "scheduleID.$": "$.scheduleID",
         "payload": {
-          "status": "PENDING",
+          "status": "FAILED",
           "runID.$": "$.resolvePipeline.payload.runID",
-          "message": "not ready - blocking traits"
+          "message": "validation timed out - traits never became ready",
+          "failureCategory": "TIMEOUT"
         }
       },
-      "ResultPath": "$.logNotReady",
+      "ResultPath": "$.logValidationTimeout",
       "Next": "ReleaseLock",
       "Retry": [
         {
@@ -394,7 +395,7 @@
         }
       },
       "ResultPath": "$.evalSLAForPoll",
-      "Next": "IsEvalSLABreachedForPoll",
+      "Next": "WaitReadiness",
       "Retry": [
         {
           "ErrorEquals": [
@@ -415,17 +416,6 @@
           "Next": "AlertError"
         }
       ]
-    },
-    "IsEvalSLABreachedForPoll": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.evalSLAForPoll.payload.breached",
-          "BooleanEquals": true,
-          "Next": "LogNotReady"
-        }
-      ],
-      "Default": "WaitReadiness"
     },
     "WaitReadiness": {
       "Type": "Wait",
