@@ -1,19 +1,18 @@
 """Category 4: Trigger & Cascade Chaos — ordering/timing.
 
 Scenarios:
-- dup-marker: Write identical MARKER twice
-- burst-markers: Write 5 MARKERs for same pipeline/schedule rapidly
-- late-data: Write bronze data with par_hour from 2-3 hours ago + MARKER
-- orphan-marker: Write MARKER for nonexistent pipeline
+- dup-marker: Write identical MARKER twice (at-least-once delivery replay)
+- late-data: Write bronze data for H-1 (previous completed hour) + MARKER
+- stale-reprocess: Write MARKER for a pipeline+schedule that already completed
 """
 
 import json
 import logging
-import random
 import time
 from datetime import datetime, timezone, timedelta
 
 import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -38,36 +37,19 @@ def dup_marker(ctx):
     return {"action": "dup_marker", "pipeline": pipeline_id, "schedule": schedule_id, "count": 2}
 
 
-def burst_markers(ctx):
-    """Write 5 MARKERs for same pipeline/schedule rapidly."""
-    table = ctx["table_name"]
-    pipeline_id = ctx["pipeline_id"]
-    now = ctx["now"]
-    date = now.strftime("%Y%m%d")
-    hour = now.strftime("%H")
-    schedule_id = f"h{hour}"
-
-    # Only inject if there's an active run for this schedule
-    if not _has_active_run(table, pipeline_id, date, schedule_id):
-        logger.info("no active run for %s/%s, skipping burst-markers", pipeline_id, schedule_id)
-        return {"skipped": True, "reason": "no active data"}
-
-    for i in range(5):
-        _write_marker(table, pipeline_id, schedule_id, now, suffix=f"burst{i}")
-
-    logger.info("wrote 5 burst MARKERs for %s/%s", pipeline_id, schedule_id)
-    return {"action": "burst_markers", "pipeline": pipeline_id, "schedule": schedule_id, "count": 5}
-
-
 def late_data(ctx):
-    """Write bronze data with par_hour from 2-3 hours ago + corresponding MARKER."""
+    """Write bronze data for the previous completed hour (H-1) + MARKER.
+
+    This is the exact real-world scenario: data for an hour block arriving
+    after that hour was already processed by the silver pipeline.
+    """
     table = ctx["table_name"]
     bucket = ctx["bucket_name"]
     pipeline_id = ctx["pipeline_id"]
     now = ctx["now"]
 
-    hours_ago = random.choice([2, 3])
-    past_time = now - timedelta(hours=hours_ago)
+    # H-1: the previous hour that should already be processed
+    past_time = now - timedelta(hours=1)
     par_day = past_time.strftime("%Y%m%d")
     par_hour = past_time.strftime("%H")
 
@@ -77,54 +59,62 @@ def late_data(ctx):
     content = json.dumps({
         "chaos": True,
         "scenario": "late-data",
-        "hoursLate": hours_ago,
+        "hoursLate": 1,
         "timestamp": now.isoformat(),
     }).encode()
     key = f"bronze/{source}/par_day={par_day}/par_hour={par_hour}/chaos_late_{now.strftime('%H%M%S')}.jsonl"
     s3.put_object(Bucket=bucket, Key=key, Body=content, ContentType="application/json")
 
-    # Write MARKER for the late schedule
+    # Write MARKER for the late schedule targeting the silver pipeline
     silver_pipeline = f"{source}-silver"
     schedule_id = f"h{par_hour}"
     _write_marker(table, silver_pipeline, schedule_id, now)
 
-    logger.info("wrote late data (%dh ago) for %s/%s", hours_ago, silver_pipeline, schedule_id)
+    logger.info("wrote late data (H-1) for %s/%s", silver_pipeline, schedule_id)
     return {
         "action": "late_data",
         "key": key,
         "pipeline": silver_pipeline,
         "schedule": schedule_id,
-        "hoursLate": hours_ago,
+        "hoursLate": 1,
     }
 
 
-def orphan_marker(ctx):
-    """Write MARKER for a nonexistent pipeline."""
+def stale_reprocess(ctx):
+    """Write MARKER for a pipeline+schedule that already has a COMPLETED RUNLOG.
+
+    Simulates a delayed EventBridge trigger or DynamoDB Streams replay after
+    the pipeline already finished. Tests that checkRunLog correctly handles
+    re-triggers of completed work.
+    """
     table = ctx["table_name"]
+    pipeline_id = ctx["pipeline_id"]
     now = ctx["now"]
+    date = now.strftime("%Y%m%d")
     hour = now.strftime("%H")
     schedule_id = f"h{hour}"
 
-    fake_pipeline = "nonexistent-chaos-pipeline"
-    _write_marker(table, fake_pipeline, schedule_id, now)
-    logger.info("wrote orphan MARKER for %s/%s", fake_pipeline, schedule_id)
-    return {"action": "orphan_marker", "pipeline": fake_pipeline, "schedule": schedule_id}
-
-
-def _has_active_run(table, pipeline_id, date, schedule_id):
-    """Check if there's a RUNLOG entry for this pipeline/schedule today."""
     pk = f"PIPELINE#{pipeline_id}"
     sk = f"RUNLOG#{date}#{schedule_id}"
+
+    # Only inject if there's a COMPLETED RUNLOG for this schedule
     try:
-        resp = ddb.get_item(
-            TableName=table,
-            Key={"PK": {"S": pk}, "SK": {"S": sk}},
-            ProjectionExpression="PK",
-        )
-        return "Item" in resp
-    except Exception:
-        logger.exception("error checking active run for %s/%s", pipeline_id, schedule_id)
-        return False
+        resp = ddb.get_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
+        item = resp.get("Item")
+        if not item:
+            return {"skipped": True, "reason": f"no RUNLOG for {pipeline_id}/{schedule_id}"}
+
+        data = json.loads(item.get("data", {}).get("S", "{}"))
+        if data.get("status") != "COMPLETED":
+            return {"skipped": True, "reason": f"RUNLOG status is {data.get('status')}, not COMPLETED"}
+    except ClientError:
+        logger.exception("error checking RUNLOG for %s/%s", pipeline_id, schedule_id)
+        return {"skipped": True, "reason": "error"}
+
+    # Write MARKER for the already-completed schedule
+    _write_marker(table, pipeline_id, schedule_id, now, suffix="stale")
+    logger.info("wrote stale-reprocess MARKER for %s/%s (already COMPLETED)", pipeline_id, schedule_id)
+    return {"action": "stale_reprocess", "pipeline": pipeline_id, "schedule": schedule_id}
 
 
 def _write_marker(table, pipeline_id, schedule_id, now, suffix=""):

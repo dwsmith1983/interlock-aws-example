@@ -1,15 +1,11 @@
 """Category 3: Control Plane Chaos — DynamoDB state manipulation.
 
 Scenarios:
-- delete-lock: Delete an active LOCK record
-- corrupt-runlog: Overwrite a COMPLETED RUNLOG status to FAILED
 - cas-conflict: Force CAS conflict by bumping RunState version
-- corrupt-runlog-json: Write invalid JSON in RUNLOG data field
 """
 
 import json
 import logging
-import random
 from datetime import datetime, timezone
 
 import boto3
@@ -18,89 +14,6 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 ddb = boto3.client("dynamodb")
-
-
-def delete_lock(ctx):
-    """Find and delete a LOCK record for a running pipeline."""
-    table = ctx["table_name"]
-    pipeline_id = ctx["pipeline_id"]
-
-    # Scan for LOCK records
-    try:
-        resp = ddb.query(
-            TableName=table,
-            KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
-            ExpressionAttributeValues={
-                ":pk": {"S": f"LOCK#{pipeline_id}"},
-                ":sk": {"S": "LOCK#"},
-            },
-            Limit=5,
-        )
-        items = resp.get("Items", [])
-        if not items:
-            # Try without pipeline-scoped lock key pattern
-            resp = ddb.query(
-                TableName=table,
-                KeyConditionExpression="PK = :pk",
-                ExpressionAttributeValues={
-                    ":pk": {"S": f"LOCK#{pipeline_id}"},
-                },
-                Limit=5,
-            )
-            items = resp.get("Items", [])
-
-        if not items:
-            return {"skipped": True, "reason": f"no lock found for {pipeline_id}"}
-
-        item = random.choice(items)
-        pk = item["PK"]["S"]
-        sk = item["SK"]["S"]
-
-        ddb.delete_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
-        logger.info("deleted lock: PK=%s SK=%s", pk, sk)
-        return {"action": "deleted_lock", "pk": pk, "sk": sk}
-    except ClientError:
-        logger.exception("error deleting lock for %s", pipeline_id)
-        return {"skipped": True, "reason": "error"}
-
-
-def corrupt_runlog(ctx):
-    """Overwrite a COMPLETED RUNLOG status to FAILED."""
-    table = ctx["table_name"]
-    pipeline_id = ctx["pipeline_id"]
-    now = ctx["now"]
-    date = now.strftime("%Y%m%d")
-    hour = now.strftime("%H")
-    schedule_id = f"h{hour}"
-
-    pk = f"PIPELINE#{pipeline_id}"
-    sk = f"RUNLOG#{date}#{schedule_id}"
-
-    try:
-        resp = ddb.get_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
-        item = resp.get("Item")
-        if not item:
-            return {"skipped": True, "reason": f"no RUNLOG for {pipeline_id}/{schedule_id}"}
-
-        data = json.loads(item.get("data", {}).get("S", "{}"))
-        if data.get("status") != "COMPLETED":
-            return {"skipped": True, "reason": f"RUNLOG status is {data.get('status')}, not COMPLETED"}
-
-        # Corrupt: change status to FAILED
-        data["status"] = "FAILED"
-        data["chaosCorrupted"] = True
-        ddb.update_item(
-            TableName=table,
-            Key={"PK": {"S": pk}, "SK": {"S": sk}},
-            UpdateExpression="SET #d = :data",
-            ExpressionAttributeNames={"#d": "data"},
-            ExpressionAttributeValues={":data": {"S": json.dumps(data)}},
-        )
-        logger.info("corrupted RUNLOG for %s/%s: COMPLETED -> FAILED", pipeline_id, schedule_id)
-        return {"action": "corrupted_runlog", "pipeline": pipeline_id, "schedule": schedule_id}
-    except ClientError:
-        logger.exception("error corrupting runlog for %s", pipeline_id)
-        return {"skipped": True, "reason": "error"}
 
 
 def cas_conflict(ctx):
@@ -151,36 +64,4 @@ def cas_conflict(ctx):
             return {"action": "cas_conflict_created", "pipeline": pipeline_id, "version": 999}
     except ClientError:
         logger.exception("error creating CAS conflict for %s", pipeline_id)
-        return {"skipped": True, "reason": "error"}
-
-
-def corrupt_runlog_json(ctx):
-    """Write invalid JSON in RUNLOG data field."""
-    table = ctx["table_name"]
-    pipeline_id = ctx["pipeline_id"]
-    now = ctx["now"]
-    date = now.strftime("%Y%m%d")
-    hour = now.strftime("%H")
-    schedule_id = f"h{hour}"
-
-    pk = f"PIPELINE#{pipeline_id}"
-    sk = f"RUNLOG#{date}#{schedule_id}"
-
-    try:
-        resp = ddb.get_item(TableName=table, Key={"PK": {"S": pk}, "SK": {"S": sk}})
-        if "Item" not in resp:
-            return {"skipped": True, "reason": f"no RUNLOG for {pipeline_id}/{schedule_id}"}
-
-        invalid_json = '{"status": "COMPLETED", "chaosCorrupted": tru'  # Truncated JSON
-        ddb.update_item(
-            TableName=table,
-            Key={"PK": {"S": pk}, "SK": {"S": sk}},
-            UpdateExpression="SET #d = :data",
-            ExpressionAttributeNames={"#d": "data"},
-            ExpressionAttributeValues={":data": {"S": invalid_json}},
-        )
-        logger.info("corrupted RUNLOG JSON for %s/%s", pipeline_id, schedule_id)
-        return {"action": "corrupted_runlog_json", "pipeline": pipeline_id, "schedule": schedule_id}
-    except ClientError:
-        logger.exception("error corrupting runlog JSON for %s", pipeline_id)
         return {"skipped": True, "reason": "error"}
