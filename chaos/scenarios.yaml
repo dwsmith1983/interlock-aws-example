@@ -54,31 +54,23 @@ scenarios:
     cooldown_minutes: 30
     recovery_timeout_minutes: 60
 
-  - id: wrong-partition
+  - id: partial-ingest
     category: data
-    severity: mild
-    probability: 0.35
-    target: "*"
-    cooldown_minutes: 20
-    recovery_timeout_minutes: 40
-
-  # Category 3: Control plane
-  - id: delete-lock
-    category: control
-    severity: severe
-    probability: 0.15
-    target: "*"
-    cooldown_minutes: 30
-    recovery_timeout_minutes: 60
-
-  - id: corrupt-runlog
-    category: control
     severity: moderate
     probability: 0.25
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 40
 
+  - id: schema-drift
+    category: data
+    severity: moderate
+    probability: 0.25
+    target: "earthquake*"
+    cooldown_minutes: 20
+    recovery_timeout_minutes: 40
+
+  # Category 3: Control plane
   - id: cas-conflict
     category: control
     severity: moderate
@@ -86,14 +78,6 @@ scenarios:
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 30
-
-  - id: corrupt-runlog-json
-    category: control
-    severity: moderate
-    probability: 0.25
-    target: "*"
-    cooldown_minutes: 20
-    recovery_timeout_minutes: 40
 
   # Category 4: Trigger/cascade
   - id: dup-marker
@@ -104,23 +88,15 @@ scenarios:
     cooldown_minutes: 20
     recovery_timeout_minutes: 20
 
-  - id: burst-markers
+  - id: late-data
     category: cascade
     severity: moderate
     probability: 0.25
     target: "*"
     cooldown_minutes: 30
-    recovery_timeout_minutes: 20
-
-  - id: late-data
-    category: cascade
-    severity: moderate
-    probability: 0.25
-    target: "earthquake*"
-    cooldown_minutes: 30
     recovery_timeout_minutes: 60
 
-  - id: orphan-marker
+  - id: stale-reprocess
     category: cascade
     severity: mild
     probability: 0.35
@@ -144,11 +120,3 @@ scenarios:
     target: "*"
     cooldown_minutes: 20
     recovery_timeout_minutes: 30
-
-  - id: dup-data
-    category: evaluator
-    severity: mild
-    probability: 0.40
-    target: "*"
-    cooldown_minutes: 20
-    recovery_timeout_minutes: 20

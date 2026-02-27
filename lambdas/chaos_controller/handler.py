@@ -37,21 +37,17 @@ SCENARIO_REGISTRY = {
     "corrupt-bronze": data_plane.corrupt_bronze,
     "empty-bronze": data_plane.empty_bronze,
     "glue-kill": data_plane.glue_kill,
-    "wrong-partition": data_plane.wrong_partition,
+    "partial-ingest": data_plane.partial_ingest,
+    "schema-drift": data_plane.schema_drift,
     # Category 3: Control plane
-    "delete-lock": control_plane.delete_lock,
-    "corrupt-runlog": control_plane.corrupt_runlog,
     "cas-conflict": control_plane.cas_conflict,
-    "corrupt-runlog-json": control_plane.corrupt_runlog_json,
     # Category 4: Cascade
     "dup-marker": cascade.dup_marker,
-    "burst-markers": cascade.burst_markers,
     "late-data": cascade.late_data,
-    "orphan-marker": cascade.orphan_marker,
+    "stale-reprocess": cascade.stale_reprocess,
     # Category 5: Evaluator
     "eval-block": evaluator.eval_block,
     "eval-slow": evaluator.eval_slow,
-    "dup-data": evaluator.dup_data,
 }
 
 SEVERITY_ORDER = {"mild": 0, "moderate": 1, "severe": 2}
