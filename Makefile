@@ -1,6 +1,6 @@
 .PHONY: build seed clean tf-bootstrap tf-init tf-plan tf-apply tf-destroy e2e kick \
        chaos-enable chaos-disable chaos-status chaos-report chaos-history \
-       fresh-start nuke dashboard-build dashboard-deploy
+       fresh-start nuke dashboard-build dashboard-deploy retrigger
 
 BUCKET_NAME ?= $(shell aws sts get-caller-identity --query Account --output text | xargs -I{} echo "$(TABLE_NAME)-data-{}")
 TABLE_NAME  ?= medallion-interlock
@@ -64,6 +64,17 @@ kick:
 	@aws lambda invoke --function-name $(TABLE_NAME)-ingest-earthquake --region $(REGION) --payload '{}' /dev/null --cli-read-timeout 120 --log-type Tail --query 'LogResult' --output text | base64 -d | tail -3
 	@echo "Invoking ingest-crypto..."
 	@aws lambda invoke --function-name $(TABLE_NAME)-ingest-crypto --region $(REGION) --payload '{}' /dev/null --cli-read-timeout 120 --log-type Tail --query 'LogResult' --output text | base64 -d | tail -3
+
+# Manually retrigger a pipeline (bypasses SFN execution name dedup)
+# Usage: make retrigger PIPELINE=earthquake-gold SCHEDULE=h16 DATE=2026-02-27
+STATE_MACHINE_ARN ?= $(shell cd deploy/terraform && terraform output -raw state_machine_arn 2>/dev/null)
+retrigger:
+	@aws stepfunctions start-execution \
+		--state-machine-arn $(STATE_MACHINE_ARN) \
+		--name "$(PIPELINE)_$(DATE)_$(SCHEDULE)_manual-$(shell date +%s)" \
+		--input '{"pipelineID":"$(PIPELINE)","scheduleID":"$(SCHEDULE)","date":"$(DATE)"}' \
+		--region $(REGION) \
+		--query 'executionArn' --output text
 
 # Run E2E tests
 e2e:
