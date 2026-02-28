@@ -1,8 +1,24 @@
-# Medallion Pipeline
+# Interlock AWS Example
 
-A production-grade [medallion architecture](https://www.databricks.com/glossary/medallion-architecture) data pipeline on AWS, orchestrated by [Interlock](https://github.com/dwsmith1983/interlock) — a STAMP-based safety framework for data pipeline reliability.
+A production-grade [medallion architecture](https://www.databricks.com/glossary/medallion-architecture) data pipeline on AWS, built to showcase [Interlock](https://github.com/dwsmith1983/interlock) — a STAMP-based safety framework for data pipeline reliability.
 
-Two live data sources flow through bronze, silver, and gold tiers using Delta Lake on S3, with AWS Glue for transformations and Step Functions for orchestration. Includes a **chaos testing framework** that systematically probes every safety mechanism in interlock.
+Two live data sources flow through bronze, silver, and gold tiers using Delta Lake on S3, with AWS Glue for transformations and Step Functions for orchestration. A **chaos testing framework** systematically probes every safety mechanism, and a **real-time dashboard** visualizes pipeline health, alerts, and chaos recovery.
+
+## What This Showcases
+
+This example demonstrates the core capabilities of the Interlock framework in a real AWS deployment:
+
+| Interlock Feature | How It's Demonstrated |
+|-------------------|----------------------|
+| **STAMP readiness traits** | 5 traits per silver pipeline (source-freshness, record-count, hour-complete, sensor-freshness, data-quality), 2 per gold (upstream-dependency, record-count) |
+| **Cascade orchestration** | Silver completion automatically triggers gold via DynamoDB Streams — no polling, no cron |
+| **SLA enforcement** | Evaluation + completion deadlines per pipeline; watchdog detects missed schedules within 5 minutes |
+| **Circuit breaker** | Orchestrator skips runs after N consecutive failures, prevents cascade amplification |
+| **Idempotent reruns** | Delta MERGE ensures re-running any stage produces identical results |
+| **Lock-based exclusion** | DynamoDB conditional writes prevent duplicate concurrent executions |
+| **Archetype inheritance** | `silver-etl` and `gold-etl` archetypes define required/optional traits; pipelines inherit and override |
+| **Chaos resilience** | 25 failure scenarios validate self-healing: auto-retry, lock recovery, data reconciliation |
+| **Operational alerting** | Slack notifications, CloudWatch alarms, dead-letter queues, structured error tracking |
 
 ## Architecture
 
@@ -40,6 +56,8 @@ Ingest Lambda ──> S3 bronze/ + DynamoDB MARKER
 
 EventBridge (20 min, conditional) ──> Chaos Controller
 EventBridge (5 min)               ──> SLA Watchdog
+DynamoDB Streams                  ──> Pipeline Monitor
+SNS Alerts Topic                  ──> Alert Logger ──> Slack
 ```
 
 ### Data Sources
@@ -87,6 +105,43 @@ Gold runs after every hourly silver, progressively refining the day's aggregatio
 | `crypto-silver` | +20 min | +35 min | Same cadence as earthquake |
 | `crypto-gold` | +40 min | +55 min | Cascades from silver |
 
+### Operational Hardening
+
+The pipeline includes production-grade operational features beyond the core Interlock framework:
+
+**Alerting** — SNS alerts topic feeds an alert-logger Lambda that persists `ALERT#` and `ERROR#` records to DynamoDB, updates `CONTROL#` pipeline health status, and forwards color-coded notifications to Slack (red=error, yellow=warning, green=info). CloudWatch alarms for Lambda errors and DLQ depth are wired to the same topic.
+
+**Dead-letter queues** — Both DynamoDB Streams consumers (stream-router and pipeline-monitor) have SQS DLQs with 14-day retention. Failed records land in the DLQ rather than being silently dropped after retries.
+
+**Circuit breaker** — The orchestrator checks `CONTROL#` consecutive failure count before starting a run. If failures exceed the threshold (default 5), the run is skipped with an alert. Prevents cascade amplification when a Glue job or evaluator is persistently failing.
+
+**Rerun cap** — Drift-triggered reruns (late-arriving data) are capped at 5 per pipeline per day (configurable). Prevents unbounded reprocessing from repeated late arrivals.
+
+**Watchdog lookback** — The missed-schedule detector only alerts on deadlines that passed within the last 15 minutes. Historical schedules (from before the pipeline was deployed) are silently ignored.
+
+## Dashboard
+
+A Next.js 15 static dashboard deployed to CloudFront + S3 provides real-time visibility into pipeline operations.
+
+**Pages:**
+
+| Page | Path | Description |
+|------|------|-------------|
+| Overview | `/` | Pipeline status cards, recent alerts, chaos status banner, run history |
+| Pipeline Detail | `/pipeline/{id}` | Per-pipeline SLA metrics, 24-hour schedule grid, trait evaluation details |
+| Run History | `/pipeline/{id}/history` | Full execution timeline, duration trends, record count progression |
+| Alerts | `/alerts` | All alerts with severity, timestamps, SLA breach details |
+| Chaos | `/chaos` | Chaos event timeline, recovery rate metrics, scenario breakdown by category |
+
+**Deploy the dashboard:**
+
+```bash
+make dashboard-build    # Next.js static export
+make dashboard-deploy   # Upload to S3 + CloudFront invalidation
+```
+
+The dashboard URL is shown in Terraform outputs after `make tf-apply`.
+
 ## Chaos Testing
 
 A dedicated **chaos-controller Lambda** injects real failures to validate every safety mechanism in interlock. It runs every 20 minutes when enabled and covers 25 scenarios across 5 categories:
@@ -94,7 +149,7 @@ A dedicated **chaos-controller Lambda** injects real failures to validate every 
 | Category | Scenarios | Examples |
 |----------|-----------|---------|
 | Infrastructure | 3 | Kill running Step Functions, throttle Lambdas to 0 concurrency |
-| Data Plane | 5 | Delete/corrupt bronze files, corrupt Delta logs, write to wrong partition |
+| Data Plane | 5 | Delete/corrupt bronze files, corrupt Delta logs, inject schema drift |
 | Control Plane | 5 | Delete locks, corrupt RunLogs, force CAS conflicts, delete pipeline configs |
 | Trigger/Cascade | 6 | Duplicate/burst MARKERs, future/late data, break upstream dependencies |
 | Evaluator | 4 | Block evaluations, inject delays, force false passes, duplicate ingestion |
@@ -126,33 +181,37 @@ make chaos-history                   # Full timeline
 
 ## AWS Resources
 
-Terraform creates ~85 resources:
+Terraform creates ~100 resources:
 
 | Resource | Count | Purpose |
 |----------|-------|---------|
 | DynamoDB | 1 table | Pipeline configs, run state, MARKERs, locks, observability (single-table design) |
-| S3 | 1 bucket | Bronze/silver/gold data + Glue scripts |
+| S3 | 2 buckets | Data (bronze/silver/gold + Glue scripts), Dashboard (static site) |
 | Step Functions | 1 state machine | Orchestrates evaluate → trigger → poll → complete → cascade |
 | Lambda (Go) | 6 | stream-router, orchestrator, evaluator, trigger, run-checker, watchdog |
-| Lambda (Python) | 4 (+1) | ingest-earthquake, ingest-crypto, custom-evaluator, alert-logger (+chaos-controller if enabled) |
+| Lambda (Python) | 7 (+1) | ingest-earthquake, ingest-crypto, custom-evaluator, pipeline-monitor, dashboard-api, alert-logger, event-exporter (+chaos-controller if enabled) |
 | Lambda Layer | 2 | Archetypes (YAML), Python shared (helpers + requests) |
-| Glue | 4 jobs | silver-earthquake, silver-crypto, gold-earthquake, gold-crypto |
-| EventBridge | 3 (+1) rules | 20-min triggers for ingestion, 5-min watchdog (+chaos-controller if enabled) |
+| Glue | 5 jobs | silver-earthquake, silver-crypto, gold-earthquake, gold-crypto, compact-observability |
+| EventBridge | 3 (+1) rules | 20-min ingestion triggers, 5-min watchdog (+chaos-controller if enabled) |
 | API Gateway | 1 HTTP API | Evaluator endpoint for trait evaluation |
-| SNS | 1 topic | Alert notifications (SLA breach, errors) |
+| SNS | 3 topics | Alerts, lifecycle signals, observability events |
+| SQS | 2 DLQs | Dead-letter queues for stream-router and pipeline-monitor |
+| CloudWatch | 8 alarms | Lambda error alarms (6) + DLQ depth alarms (2) |
+| CloudFront | 1 distribution | Dashboard CDN |
 | IAM | ~13 roles | Least-privilege roles per Lambda, Glue, Step Functions |
 
 ## Prerequisites
 
 - [Go](https://go.dev/) 1.24+
 - Python 3.12+
+- Node.js 18+ (for dashboard)
 - [Terraform](https://www.terraform.io/) 1.5+
 - [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) configured with credentials
 - pip (for building the Python shared layer)
 
 ### Interlock Dependency
 
-This project depends on the [interlock](https://github.com/dwsmith1983/interlock) Go module (`v0.1.1`) for the Lambda binaries. It is fetched automatically via the Go module proxy — no local clone required.
+This project depends on the [interlock](https://github.com/dwsmith1983/interlock) Go module for the Lambda binaries. It is fetched automatically via the Go module proxy — no local clone required.
 
 For local development with unpublished interlock changes, create a `go.work` file:
 
@@ -171,8 +230,8 @@ The build script auto-detects `go.work` and builds from the local workspace inst
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/dwsmith1983/medallion-pipeline.git
-cd medallion-pipeline
+git clone https://github.com/dwsmith1983/interlock-aws-example.git
+cd interlock-aws-example
 ```
 
 ### 2. (Optional) Bootstrap remote Terraform state
@@ -196,14 +255,17 @@ make tf-init
 make tf-apply    # builds Lambda binaries, then runs terraform apply
 ```
 
-To enable chaos testing:
+### 5. (Optional) Configure Slack notifications
 
-```bash
-cd deploy/terraform
-terraform apply -var="chaos_enabled=true"
+Create `deploy/terraform/secret.auto.tfvars` (gitignored):
+
+```hcl
+slack_webhook_url = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 ```
 
-### 5. Register pipelines
+Then re-run `make tf-apply` to pick up the change.
+
+### 6. Register pipelines
 
 ```bash
 make seed
@@ -211,7 +273,7 @@ make seed
 
 This registers all 4 pipelines (96 hourly schedules total) and seeds the chaos configuration.
 
-### 6. Start the first ingestion
+### 7. Start the first ingestion
 
 ```bash
 make kick    # invokes both ingest Lambdas immediately
@@ -221,6 +283,22 @@ After this, EventBridge triggers ingestion every 20 minutes. The full pipeline c
 
 ```
 ingest (20 min) → silver (hourly) → gold (hourly, cascade)
+```
+
+### 8. Deploy the dashboard
+
+```bash
+make dashboard-build
+make dashboard-deploy
+```
+
+### Quick start
+
+For a clean deploy with everything in one shot:
+
+```bash
+make fresh-start              # deploy + seed + kick
+make fresh-start CHAOS=true   # deploy + seed + kick + enable chaos
 ```
 
 ### Verify
@@ -241,13 +319,15 @@ You should see silver and gold executions for both data sources, all `SUCCEEDED`
 Override defaults via Terraform variables or `terraform.tfvars`:
 
 ```hcl
-aws_region              = "us-east-1"    # default: ap-southeast-1
-table_name              = "my-pipeline"  # default: medallion-interlock
-earthquake_rate_minutes = 30             # default: 20
-crypto_rate_minutes     = 30             # default: 20
-glue_timeout_minutes    = 15             # default: 30
-chaos_enabled           = true           # default: false
-chaos_rate_minutes      = 10             # default: 20
+aws_region                = "us-east-1"    # default: ap-southeast-1
+table_name                = "my-pipeline"  # default: medallion-interlock
+earthquake_rate_minutes   = 30             # default: 20
+crypto_rate_minutes       = 30             # default: 20
+glue_timeout_minutes      = 15             # default: 30
+chaos_enabled             = true           # default: false
+chaos_rate_minutes        = 10             # default: 20
+circuit_breaker_threshold = 3              # default: 5
+max_reruns_per_day        = 10             # default: 5
 ```
 
 ### Teardown
@@ -256,34 +336,43 @@ chaos_rate_minutes      = 10             # default: 20
 make tf-destroy
 ```
 
-S3 bucket has `force_destroy = true`, so all data is deleted automatically.
+S3 buckets have `force_destroy = true`, so all data is deleted automatically.
 
 ## Project Structure
 
 ```
-medallion-pipeline/
+interlock-aws-example/
   archetypes/           Interlock archetype definitions (silver-etl, gold-etl)
   chaos/                Chaos scenario configuration (scenarios.yaml)
   cmd/seed/             Pipeline + chaos config registration tool
+  dashboard/            Next.js 15 + Tailwind dashboard (5 pages, 13 components)
   deploy/
     build.sh            Builds Go Lambda binaries (auto-detects go.work) + stages layers
     statemachine.asl.json  Step Function ASL definition
-    terraform/          All infrastructure-as-code
+    terraform/          All infrastructure-as-code (~100 resources)
+      alarms.tf         CloudWatch alarms + Glue failure EventBridge rule
       chaos.tf          Chaos controller Lambda + EventBridge + IAM (conditional)
+      dashboard.tf      CloudFront + S3 static site hosting
+      dlq.tf            Dead-letter queues for stream consumers
+      monitor.tf        Pipeline-monitor Lambda (DynamoDB Streams → CONTROL#/JOBLOG#)
+      sns.tf            SNS topics + alert-logger + event-exporter Lambdas
       bootstrap/        Remote state backend (optional)
   e2e/                  End-to-end test suite
   glue/                 PySpark ETL scripts (silver + gold, per source)
   lambdas/
+    alert_logger/       SNS → DynamoDB persistence + Slack forwarding
     chaos_controller/   Chaos injection engine (25 scenarios across 5 categories)
-      scenarios/        Scenario implementations (infrastructure, data, control, cascade, evaluator)
+      scenarios/        Scenario implementations by category
       recovery.py       Recovery checker (INJECTED → RECOVERED/UNRECOVERED)
-    evaluator/          Custom trait evaluator (source-freshness, record-count, upstream-dependency)
+    dashboard_api/      HTTP API backend for dashboard data
+    evaluator/          Custom trait evaluator (source-freshness, record-count, hour-complete)
+    event_exporter/     Observability event consumer
     ingest_earthquake/  USGS earthquake data ingestion
     ingest_crypto/      CoinLore crypto ticker ingestion
-    alert_logger/       SNS subscriber — logs alerts + writes ERROR#/CONTROL# records
+    pipeline_monitor/   DynamoDB Streams → CONTROL# health + JOBLOG# records
     shared/             Python helpers (MARKER writer, S3 utils, chaos checks, observability)
   pipelines/            Pipeline YAML configs (traits, triggers, SLAs, schedules)
-  Makefile              Build, deploy, seed, kick, chaos, teardown
+  Makefile              Build, deploy, seed, kick, chaos, dashboard, teardown
 ```
 
 ## Observability
@@ -292,11 +381,18 @@ All observability records use the DynamoDB single-table design with 30-day TTL:
 
 | Record Type | Purpose | Query via GSI1PK |
 |-------------|---------|-----------------|
+| `PIPELINE#CONFIG` | Pipeline definitions (96 hourly schedules) | `PIPELINES` |
+| `RUNLOG#` | Execution state per pipeline/schedule/date | `RUNLOGS` |
 | `EVAL#` | Individual trait evaluation results | `EVALS` |
+| `JOBLOG#` | Glue job analytics (duration, record counts, tier/source) | `JOBLOGS` |
 | `ERROR#` | Failure records with resolution tracking | `ERRORS` |
+| `ALERT#` | Alert persistence (SLA breach, errors, chaos) | `ALERTS` |
+| `CONTROL#` | Pipeline health (consecutive failures, last success, circuit breaker state) | `CONTROLS` |
 | `CHAOS#` | Chaos injection lifecycle (injected/detected/recovered) | `CHAOS` |
-| `CONTROL#` | Pipeline health dashboard (consecutive failures, last success) | `CONTROLS` |
-| `ALERT#` | Alert persistence (SLA breach, errors) | `ALERTS` |
+| `MARKER#` | Ingestion + cascade completion signals | — |
+| `LOCK#` | Distributed locks for execution exclusion | — |
+| `DEDUP#` | Deduplication records | — |
+| `RERUN#` | Drift-triggered rerun tracking | — |
 
 ## Cost
 
@@ -306,6 +402,6 @@ With default settings (G.1X Glue, 2 workers, 20-min ingestion):
 - **Lambda**: Negligible (millisecond durations, free tier covers most).
 - **DynamoDB**: Pay-per-request, negligible at this scale.
 - **Step Functions**: \$0.025 per 1000 state transitions. ~\$0.10/day.
-- **S3**: Storage costs minimal for this data volume.
+- **S3 + CloudFront**: Storage and CDN costs minimal for this data volume.
 
 **Estimated total: ~\$6-8/day** (dominated by Glue). Reduce by increasing ingestion intervals or running fewer hours.
