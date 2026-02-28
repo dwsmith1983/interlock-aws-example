@@ -1,15 +1,15 @@
 """Ingest CoinLore top-100 cryptocurrency tickers into bronze S3 + write hour-completion MARKER.
 
 Triggered every 20 minutes by EventBridge. Fetches top 100 cryptocurrencies by market cap,
-adds snapshot_time, writes JSONL to bronze partitioned by ingestion time. Writes an
-hour-completion MARKER for the previous hour only (current hour is still accumulating).
-The completion MARKER triggers the DynamoDB stream → stream-router → SFN validation pipeline.
+adds snapshot_time, writes JSONL to bronze partitioned by ingestion time. On the last
+scheduled run of the hour (minute >= 40), writes an hour-completion MARKER for the current
+hour. The completion MARKER triggers the DynamoDB stream → stream-router → SFN pipeline.
 """
 
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import requests
 from shared.helpers import (
@@ -107,13 +107,10 @@ def handler(event, context):
     # Increment per-hour record count sensor
     increment_hour_record_count(TABLE, f"{SOURCE}-silver", par_day, par_hour, len(records))
 
-    # Write hour-completion marker for previous hour (current hour still accumulating)
-    prev_hour = (hour_int - 1) % 24
-    if hour_int == 0:
-        prev_day = (now - timedelta(days=1)).strftime("%Y%m%d")
-    else:
-        prev_day = par_day
-    write_hour_complete_marker(TABLE, f"{SOURCE}-silver", SOURCE, prev_day, f"{prev_hour:02d}")
+    # Write hour-completion marker on the last scheduled run of the hour.
+    # With 20-min cadence (:00, :20, :40), the :40 run is the final ingestion for this hour.
+    if now.minute >= 40:
+        write_hour_complete_marker(TABLE, f"{SOURCE}-silver", SOURCE, par_day, par_hour)
 
     # Write sensor data for builtin evaluators
     quality = _compute_quality_metrics(records)
