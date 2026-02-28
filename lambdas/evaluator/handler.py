@@ -61,10 +61,14 @@ def handler(event, context):
         _write_eval_record(pipeline_id, schedule_id or "unknown", trait_type, chaos_result)
         return _response(200, chaos_result)
 
+    # Inject pipelineID into config for evaluators that need it.
+    config["pipelineID"] = pipeline_id
+
     evaluators = {
         "/evaluate/source-freshness": evaluate_source_freshness,
         "/evaluate/record-count": evaluate_record_count,
         "/evaluate/upstream-dependency": evaluate_upstream_dependency,
+        "/evaluate/hour-complete": evaluate_hour_complete,
     }
 
     fn = evaluators.get(path)
@@ -251,6 +255,59 @@ def evaluate_upstream_dependency(config):
         "status": "FAIL",
         "reason": f"no RunLog found for {upstream} schedule {schedule_id} on {date}",
         "value": {"upstreamPipeline": upstream, "scheduleID": schedule_id},
+    }
+
+
+def evaluate_hour_complete(config):
+    """Check if the per-hour record count has reached the expected threshold.
+
+    Reads the atomic counter written by increment_hour_record_count() in the
+    ingestion lambdas.  SENSOR#record-count#{par_day}#{par_hour} stores a
+    running count that is atomically incremented on each ingestion batch.
+    """
+    pipeline_id = config.get("pipelineID", "unknown")
+    expected_count = config.get("expectedCount", 1)
+    hour = config.get("hour")
+    date = config.get("date", datetime.now(timezone.utc).strftime("%Y%m%d")).replace("-", "")
+
+    if hour is None:
+        return {
+            "status": "FAIL",
+            "reason": "hour-complete evaluator requires an hour",
+            "value": {"expectedCount": expected_count},
+        }
+
+    par_hour = f"{hour:02d}"
+    sk = f"SENSOR#record-count#{date}#{par_hour}"
+
+    resp = ddb_client.get_item(
+        TableName=TABLE_NAME,
+        Key={
+            "PK": {"S": f"PIPELINE#{pipeline_id}"},
+            "SK": {"S": sk},
+        },
+        ConsistentRead=True,
+    )
+
+    item = resp.get("Item")
+    if not item:
+        return {
+            "status": "FAIL",
+            "reason": f"no record-count sensor for {pipeline_id} {date}/{par_hour}",
+            "value": {"count": 0, "expectedCount": expected_count},
+        }
+
+    count = int(item.get("count", {}).get("N", "0"))
+    if count >= expected_count:
+        return {
+            "status": "PASS",
+            "value": {"count": count, "expectedCount": expected_count},
+        }
+
+    return {
+        "status": "FAIL",
+        "reason": f"record count {count} < expected {expected_count}",
+        "value": {"count": count, "expectedCount": expected_count},
     }
 
 

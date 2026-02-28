@@ -18,6 +18,7 @@ import requests
 from shared.helpers import (
     check_dedup,
     compute_sha256,
+    increment_hour_record_count,
     record_dedup,
     upload_to_s3,
     write_marker,
@@ -105,6 +106,9 @@ def handler(event, context):
         # Record dedup
         record_dedup(TABLE, SOURCE, par_day, hour_int, content_hash, uri, len(records))
         logger.info("wrote %d events to %s", len(records), uri)
+
+        # Increment per-hour record count sensor
+        increment_hour_record_count(TABLE, f"{SOURCE}-silver", par_day, par_hour, len(records))
 
         # Write MARKER for silver pipeline (one per hour partition)
         schedule_id = f"h{par_hour}"

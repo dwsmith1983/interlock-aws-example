@@ -134,6 +134,45 @@ def write_sensor_data(table_name: str, pipeline_id: str, sensor_type: str, value
     logger.info("wrote SENSOR %s for %s", sensor_type, pipeline_id)
 
 
+def increment_hour_record_count(
+    table_name: str,
+    pipeline_id: str,
+    par_day: str,
+    par_hour: str,
+    count: int,
+):
+    """Atomically increment the per-hour record count SENSOR for a pipeline.
+
+    Key: PK=PIPELINE#{pipeline_id}, SK=SENSOR#record-count#{par_day}#{par_hour}
+    Uses ADD to enable concurrent increments from multiple ingestion invocations.
+    """
+    now = datetime.now(timezone.utc)
+    ttl = int(now.timestamp()) + (7 * 86400)  # 7 day TTL
+
+    ddb.update_item(
+        TableName=table_name,
+        Key={
+            "PK": {"S": f"PIPELINE#{pipeline_id}"},
+            "SK": {"S": f"SENSOR#record-count#{par_day}#{par_hour}"},
+        },
+        UpdateExpression="ADD #cnt :inc SET #ua = :now, #ttl = :ttl",
+        ExpressionAttributeNames={
+            "#cnt": "count",
+            "#ua": "updatedAt",
+            "#ttl": "ttl",
+        },
+        ExpressionAttributeValues={
+            ":inc": {"N": str(count)},
+            ":now": {"S": now.isoformat()},
+            ":ttl": {"N": str(ttl)},
+        },
+    )
+    logger.info(
+        "incremented record count for %s par_day=%s par_hour=%s by %d",
+        pipeline_id, par_day, par_hour, count,
+    )
+
+
 def check_chaos_block(table_name: str, pipeline_id: str) -> bool:
     """Check if a chaos eval-block record exists for this pipeline.
 
