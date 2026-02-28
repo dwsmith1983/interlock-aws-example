@@ -92,11 +92,13 @@ func buildConfig(pf *pipelineFile, bucketName, tableName string) types.PipelineC
 	}
 
 	// Resolve template variables in trigger arguments.
-	if pf.Trigger != nil && len(pf.Trigger.Arguments) > 0 {
-		for k, v := range pf.Trigger.Arguments {
-			v = strings.ReplaceAll(v, "${BUCKET_NAME}", bucketName)
-			v = strings.ReplaceAll(v, "${TABLE_NAME}", tableName)
-			pf.Trigger.Arguments[k] = v
+	if pf.Trigger != nil {
+		if args := pf.Trigger.TriggerArguments(); len(args) > 0 {
+			for k, v := range args {
+				v = strings.ReplaceAll(v, "${BUCKET_NAME}", bucketName)
+				v = strings.ReplaceAll(v, "${TABLE_NAME}", tableName)
+				args[k] = v
+			}
 		}
 	}
 
