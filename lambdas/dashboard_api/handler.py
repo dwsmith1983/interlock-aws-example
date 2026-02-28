@@ -7,6 +7,7 @@ Routes:
   /dashboard/pipelines/{id}/status  - Current health for one pipeline
   /dashboard/pipelines/{id}/jobs    - Recent job history
   /dashboard/pipelines/{id}/runlogs - Recent run log entries
+  /dashboard/pipelines/{id}/history - Full lifecycle for a specific run
   /dashboard/chaos/events      - All chaos injection events
   /dashboard/chaos/config      - Current chaos configuration
   /dashboard/alerts            - Recent alerts (last 50)
@@ -73,6 +74,13 @@ def handler(event, context):
                     return _handle_pipeline_jobs(pipeline_id)
                 elif action == "runlogs":
                     return _handle_pipeline_runlogs(pipeline_id)
+                elif action == "history":
+                    qs = event.get("queryStringParameters") or {}
+                    date = qs.get("date", "")
+                    schedule = qs.get("schedule", "")
+                    if not date or not schedule:
+                        return _response(400, {"error": "date and schedule query params required"})
+                    return _handle_pipeline_history(pipeline_id, date, schedule)
 
         return _response(404, {"error": "not found", "path": path})
 
@@ -185,6 +193,101 @@ def _handle_pipeline_runlogs(pipeline_id):
     return _response(200, {
         "pipelineId": pipeline_id,
         "runlogs": runlogs,
+    })
+
+
+def _handle_pipeline_history(pipeline_id, date, schedule_id):
+    """Full lifecycle view for a specific pipeline run (date + schedule)."""
+    pk = f"PIPELINE#{pipeline_id}"
+
+    # 1. Get the RunLog entry
+    try:
+        resp = ddb.get_item(
+            TableName=TABLE_NAME,
+            Key={
+                "PK": {"S": pk},
+                "SK": {"S": f"RUNLOG#{date}#{schedule_id}"},
+            },
+        )
+        runlog_item = resp.get("Item")
+    except ClientError:
+        logger.exception("failed to get RUNLOG for %s/%s/%s", pipeline_id, date, schedule_id)
+        runlog_item = None
+
+    runlog = {}
+    if runlog_item:
+        runlog = _unmarshall(runlog_item)
+        if "data" in runlog:
+            try:
+                runlog["runData"] = json.loads(runlog["data"])
+                del runlog["data"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # Determine time bounds for event/alert queries
+    started_at = runlog.get("runData", {}).get("startedAt") or runlog.get("timestamp", "")
+    completed_at = runlog.get("runData", {}).get("completedAt", "")
+
+    # Convert to millis for EVENT# SK range
+    start_millis = _iso_to_millis(started_at) if started_at else None
+    end_millis = _iso_to_millis(completed_at) if completed_at else None
+    if start_millis and not end_millis:
+        end_millis = start_millis + 7_200_000  # +2h fallback
+
+    # 2. Query events in time range
+    events = []
+    if start_millis and end_millis:
+        event_items = _query_items_between(
+            pk=pk,
+            sk_start=f"EVENT#{start_millis}",
+            sk_end=f"EVENT#{end_millis}z",
+            limit=200,
+        )
+        for item in event_items:
+            flat = _unmarshall(item)
+            if "data" in flat:
+                try:
+                    flat["eventData"] = json.loads(flat["data"])
+                    del flat["data"]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            events.append(flat)
+
+    # 3. Query alerts in time range
+    alerts = []
+    if start_millis and end_millis:
+        alert_items = _query_items_between(
+            pk=pk,
+            sk_start=f"ALERT#{start_millis}",
+            sk_end=f"ALERT#{end_millis}z",
+            limit=100,
+        )
+        for item in alert_items:
+            flat = _unmarshall(item)
+            if "data" in flat:
+                try:
+                    flat["alertData"] = json.loads(flat["data"])
+                    del flat["data"]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            alerts.append(flat)
+
+    # 4. Query job logs for this schedule
+    job_items = _query_items(
+        pk=f"JOBLOG#{pipeline_id}",
+        sk_prefix=f"{date}#{schedule_id}#",
+        limit=50,
+    )
+    jobs = [_unmarshall(i) for i in job_items]
+
+    return _response(200, {
+        "pipelineId": pipeline_id,
+        "date": date,
+        "scheduleId": schedule_id,
+        "runLog": runlog,
+        "events": events,
+        "alerts": alerts,
+        "jobs": jobs,
     })
 
 
@@ -306,6 +409,26 @@ def _query_items(pk, sk_prefix=None, limit=50, scan_forward=True):
         return []
 
 
+def _query_items_between(pk, sk_start, sk_end, limit=200, scan_forward=True):
+    """Query DynamoDB by PK with SK BETWEEN range."""
+    try:
+        resp = ddb.query(
+            TableName=TABLE_NAME,
+            KeyConditionExpression="PK = :pk AND SK BETWEEN :sk_start AND :sk_end",
+            ExpressionAttributeValues={
+                ":pk": {"S": pk},
+                ":sk_start": {"S": sk_start},
+                ":sk_end": {"S": sk_end},
+            },
+            ScanIndexForward=scan_forward,
+            Limit=limit,
+        )
+        return resp.get("Items", [])
+    except ClientError:
+        logger.exception("between query failed for PK=%s", pk)
+        return []
+
+
 def _query_gsi1(gsi1pk, limit=50, scan_forward=True):
     """Query GSI1 by GSI1PK."""
     try:
@@ -367,6 +490,18 @@ def _unmarshall_value(value):
     elif "L" in value:
         return [_unmarshall_value(v) for v in value["L"]]
     return str(value)
+
+
+def _iso_to_millis(iso_str):
+    """Convert ISO 8601 timestamp string to epoch milliseconds."""
+    from datetime import datetime, timezone
+    try:
+        # Handle both 'Z' suffix and '+00:00'
+        s = iso_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        return int(dt.timestamp() * 1000)
+    except (ValueError, AttributeError):
+        return None
 
 
 def _response(status_code, body):

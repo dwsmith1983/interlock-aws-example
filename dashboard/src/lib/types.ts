@@ -91,6 +91,26 @@ export interface RunLog {
   runData?: Record<string, unknown>;
 }
 
+export interface RunHistoryEvent {
+  kind: string;
+  status?: string;
+  timestamp: string;
+  message?: string;
+  traitType?: string;
+  runId?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface RunHistory {
+  pipelineId: string;
+  date: string;
+  scheduleId: string;
+  runLog: RunLog & { runData: Record<string, unknown> };
+  events: RunHistoryEvent[];
+  alerts: Alert[];
+  jobs: JobLog[];
+}
+
 export interface OverviewData {
   pipelines: PipelineStatus[];
   chaosEvents: ChaosEvent[];
