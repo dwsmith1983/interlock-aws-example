@@ -19,7 +19,7 @@ traits:
   - type: hour-complete
     evaluator: evaluate/hour-complete
     config:
-      expectedCount: 100
+      expectedCount: 300
   - type: sensor-freshness
     evaluator: builtin:sensor-freshness
     config:

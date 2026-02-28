@@ -111,6 +111,44 @@ def write_marker(
     logger.info("wrote MARKER for %s schedule=%s", pipeline_id, schedule_id)
 
 
+def write_hour_complete_marker(table_name, pipeline_id, source_name, par_day, par_hour):
+    """Write a completion MARKER for a finished hour. Idempotent via conditional write.
+
+    Only fires the DynamoDB stream event once per hour due to conditional put.
+    The stream-router reads the date field for correct date at midnight rollover.
+    """
+    schedule_id = f"h{par_hour}"
+    sk = f"MARKER#{source_name}#complete#{par_day}#{par_hour}"
+    # Format date as YYYY-MM-DD to match stream-router convention
+    date_formatted = f"{par_day[:4]}-{par_day[4:6]}-{par_day[6:8]}"
+    try:
+        ddb.put_item(
+            TableName=table_name,
+            Item={
+                "PK": {"S": f"PIPELINE#{pipeline_id}"},
+                "SK": {"S": sk},
+                "scheduleID": {"S": schedule_id},
+                "date": {"S": date_formatted},
+                "completedAt": {"S": datetime.now(timezone.utc).isoformat()},
+                "ttl": {"N": str(int(time.time()) + 86400)},
+            },
+            ConditionExpression="attribute_not_exists(PK)",
+        )
+        logger.info(
+            "wrote hour-complete MARKER for %s date=%s hour=%s",
+            pipeline_id, par_day, par_hour,
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            logger.info(
+                "hour-complete MARKER already exists for %s date=%s hour=%s",
+                pipeline_id, par_day, par_hour,
+            )
+            return False  # already written
+        raise
+
+
 def write_sensor_data(table_name: str, pipeline_id: str, sensor_type: str, value: dict):
     """Write a SENSOR record to DynamoDB for builtin evaluator consumption.
 
@@ -229,15 +267,3 @@ def write_observability_record(
     logger.info("wrote %s record for %s", record_type, pipeline_id)
 
 
-class HourTracker:
-    """Tracks which hour we last wrote a MARKER for, to write at most once per hour turn."""
-
-    def __init__(self):
-        self._last_marker_hour = None
-
-    def should_write_marker(self, current_hour: int) -> bool:
-        """Returns True if this is a new hour we haven't written a MARKER for."""
-        if self._last_marker_hour != current_hour:
-            self._last_marker_hour = current_hour
-            return True
-        return False
