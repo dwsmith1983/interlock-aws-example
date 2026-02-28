@@ -14,7 +14,7 @@ import json
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import requests
 from shared.helpers import (
@@ -112,22 +112,13 @@ def handler(event, context):
         # Increment per-hour record count sensor
         increment_hour_record_count(TABLE, f"{SOURCE}-silver", par_day, par_hour, len(records))
 
-    # Write hour-completion markers for past hours that received data
-    completed_hours = set()
+    # Write hour-completion markers for past hours that received data.
+    # Only hours where int(par_hour) != current_hour are complete — the current hour
+    # is still accumulating. Event-time partitioning ensures late-arriving records
+    # land in the correct hour; future MERGE upserts handle updates.
     for par_day, par_hour in partitions.keys():
         if int(par_hour) != current_hour:
-            completed_hours.add((par_day, par_hour))
-
-    # Always try previous hour (handle midnight rollover)
-    prev_hour = (current_hour - 1) % 24
-    if current_hour == 0:
-        prev_day = (now - timedelta(days=1)).strftime("%Y%m%d")
-    else:
-        prev_day = now.strftime("%Y%m%d")
-    completed_hours.add((prev_day, f"{prev_hour:02d}"))
-
-    for par_day, par_hour in completed_hours:
-        write_hour_complete_marker(TABLE, f"{SOURCE}-silver", SOURCE, par_day, par_hour)
+            write_hour_complete_marker(TABLE, f"{SOURCE}-silver", SOURCE, par_day, par_hour)
 
     # Write sensor data for builtin evaluators
     if total_events > 0:

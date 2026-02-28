@@ -59,7 +59,7 @@ def merge_or_create(df, path, merge_condition):
 
 
 # 1. Hourly Summary
-hourly = silver_df.groupBy("par_day", "par_hour").agg(
+hourly = silver_df.groupBy("par_day", "hour").agg(
     F.count("*").alias("event_count"),
     F.avg("magnitude").alias("avg_magnitude"),
     F.max("magnitude").alias("max_magnitude"),
@@ -72,7 +72,7 @@ hourly = silver_df.groupBy("par_day", "par_hour").agg(
 
 hourly_path = f"{gold_base}/hourly_summary/"
 merge_or_create(hourly, hourly_path,
-                "target.par_day = source.par_day AND target.par_hour = source.par_hour")
+                "target.par_day = source.par_day AND target.hour = source.hour")
 print(f"Wrote {hourly.count()} hourly_summary records")
 
 # 2. Daily Summary

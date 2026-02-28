@@ -65,9 +65,9 @@ df = df.withColumn("coin_id", F.col("coin_id").cast(StringType())) \
        .withColumn("snapshot_time", F.to_timestamp("snapshot_time")) \
        .withColumn("ingested_at", F.to_timestamp("ingested_at"))
 
-# Add partition columns
+# Add partition column + hour lineage column (not a partition in silver)
 df = df.withColumn("par_day", F.lit(par_day)) \
-       .withColumn("par_hour", F.lit(par_hour))
+       .withColumn("hour", F.lit(par_hour))
 
 # Dedup by coin_id + snapshot_time (keep latest ingested_at)
 window = Window.partitionBy("coin_id", "snapshot_time").orderBy(F.col("ingested_at").desc())
