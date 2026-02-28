@@ -37,27 +37,28 @@ locals {
   core_lambda_names = toset(["orchestrator", "evaluator", "trigger", "run-checker"])
 
   go_lambda_common_env = {
-    TABLE_NAME    = aws_dynamodb_table.main.name
-    SNS_TOPIC_ARN = aws_sns_topic.alerts.arn
-    ARCHETYPE_DIR = "/opt/archetypes"
+    TABLE_NAME                = aws_dynamodb_table.main.name
+    SNS_TOPIC_ARN             = aws_sns_topic.alerts.arn
+    ARCHETYPE_DIR             = "/opt/archetypes"
     READINESS_TTL             = var.readiness_ttl
     RETENTION_TTL             = var.retention_ttl
     CIRCUIT_BREAKER_THRESHOLD = var.circuit_breaker_threshold
+    MAX_RERUNS_PER_DAY        = var.max_reruns_per_day
   }
 
   python_lambdas = {
-    "custom-evaluator"   = { source_dir = "evaluator", timeout = 30 }
-    "ingest-earthquake"  = { source_dir = "ingest_earthquake", timeout = 60 }
-    "ingest-crypto"      = { source_dir = "ingest_crypto", timeout = 60 }
-    "pipeline-monitor"   = { source_dir = "pipeline_monitor", timeout = 60 }
-    "dashboard-api"      = { source_dir = "dashboard_api", timeout = 30 }
+    "custom-evaluator"  = { source_dir = "evaluator", timeout = 30 }
+    "ingest-earthquake" = { source_dir = "ingest_earthquake", timeout = 60 }
+    "ingest-crypto"     = { source_dir = "ingest_crypto", timeout = 60 }
+    "pipeline-monitor"  = { source_dir = "pipeline_monitor", timeout = 60 }
+    "dashboard-api"     = { source_dir = "dashboard_api", timeout = 30 }
   }
 
   glue_jobs = {
-    "medallion-silver-earthquake"  = "silver_earthquake.py"
-    "medallion-silver-crypto"      = "silver_crypto.py"
-    "medallion-gold-earthquake"    = "gold_earthquake.py"
-    "medallion-gold-crypto"        = "gold_crypto.py"
+    "medallion-silver-earthquake"     = "silver_earthquake.py"
+    "medallion-silver-crypto"         = "silver_crypto.py"
+    "medallion-gold-earthquake"       = "gold_earthquake.py"
+    "medallion-gold-crypto"           = "gold_crypto.py"
     "medallion-compact-observability" = "compact_observability.py"
   }
 

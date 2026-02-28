@@ -1,10 +1,12 @@
 """SNS alert logger — persists alerts to CloudWatch Logs, DynamoDB ALERT# and ERROR# records,
-and updates CONTROL# pipeline health status."""
+updates CONTROL# pipeline health status, and forwards to Slack."""
 
 import json
 import logging
 import os
 import time
+import urllib.request
+import urllib.error
 
 import boto3
 
@@ -12,11 +14,20 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TABLE_NAME = os.environ["TABLE_NAME"]
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
+
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
 
 # 30-day TTL for alert/error records
 RECORD_TTL_SECONDS = 30 * 24 * 60 * 60
+
+# Slack severity → color mapping
+_SEVERITY_COLORS = {
+    "error": "#e01e5a",    # red
+    "warning": "#ecb22e",  # yellow
+    "info": "#2eb886",     # blue/green
+}
 
 
 def handler(event, context):
@@ -95,6 +106,9 @@ def handler(event, context):
         # Update CONTROL# pipeline health
         _update_control(pipeline_id, alert_type, timestamp)
 
+        # Forward to Slack
+        _notify_slack(pipeline_id, alert_type, severity, schedule_id, timestamp, alert)
+
     return {"statusCode": 200, "processed": len(event.get("Records", []))}
 
 
@@ -118,3 +132,40 @@ def _update_control(pipeline_id, alert_type, timestamp):
         )
     except Exception:
         logger.exception("failed to update CONTROL record for %s", pipeline_id)
+
+
+def _notify_slack(pipeline_id, alert_type, severity, schedule_id, timestamp, alert):
+    """Post alert to Slack webhook. Fails gracefully — logs and continues."""
+    if not SLACK_WEBHOOK_URL:
+        return
+
+    color = _SEVERITY_COLORS.get(severity, "#808080")
+    message = alert.get("message", "")
+
+    payload = {
+        "attachments": [
+            {
+                "color": color,
+                "fallback": f"[{severity.upper()}] {pipeline_id}: {alert_type}",
+                "fields": [
+                    {"title": "Pipeline", "value": pipeline_id, "short": True},
+                    {"title": "Alert Type", "value": alert_type, "short": True},
+                    {"title": "Severity", "value": severity.upper(), "short": True},
+                    {"title": "Schedule", "value": schedule_id or "—", "short": True},
+                    {"title": "Timestamp", "value": timestamp, "short": False},
+                    {"title": "Message", "value": message or "—", "short": False},
+                ],
+            }
+        ]
+    }
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            SLACK_WEBHOOK_URL,
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except (urllib.error.URLError, OSError):
+        logger.exception("Slack webhook POST failed for %s", pipeline_id)

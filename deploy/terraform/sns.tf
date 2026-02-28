@@ -57,7 +57,8 @@ resource "aws_lambda_function" "alert_logger" {
 
   environment {
     variables = {
-      TABLE_NAME = aws_dynamodb_table.main.name
+      TABLE_NAME        = aws_dynamodb_table.main.name
+      SLACK_WEBHOOK_URL = var.slack_webhook_url
     }
   }
 

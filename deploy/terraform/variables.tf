@@ -173,3 +173,17 @@ variable "destroy_on_delete" {
   type        = bool
   default     = true
 }
+
+# Operational hardening
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for alert notifications (empty to disable)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "max_reruns_per_day" {
+  description = "Maximum drift-triggered reruns per pipeline per day"
+  type        = string
+  default     = "5"
+}
