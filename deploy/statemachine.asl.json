@@ -1,5 +1,6 @@
 {
   "Comment": "Interlock pipeline evaluation, trigger, and monitoring workflow",
+  "TimeoutSeconds": 3600,
   "StartAt": "InitDefaults",
   "States": {
     "InitDefaults": {
