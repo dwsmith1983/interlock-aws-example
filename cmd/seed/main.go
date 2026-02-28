@@ -51,10 +51,11 @@ type chaosConfig struct {
 func generateHourlySchedules() []types.ScheduleConfig {
 	schedules := make([]types.ScheduleConfig, 24)
 	for h := 0; h < 24; h++ {
+		afterHour := (h + 1) % 24
 		schedules[h] = types.ScheduleConfig{
 			Name:     fmt.Sprintf("h%02d", h),
-			After:    fmt.Sprintf("%02d:10", h),
-			Deadline: fmt.Sprintf("%02d:50", h),
+			After:    fmt.Sprintf("%02d:00", afterHour),
+			Deadline: fmt.Sprintf("%02d:50", afterHour),
 			Timezone: "UTC",
 		}
 	}
