@@ -40,6 +40,10 @@ def handler(event, context):
         except json.JSONDecodeError:
             alert = {"raw": message_str}
 
+        # Detect CloudWatch Alarm format and normalize to our schema.
+        if "AlarmName" in alert:
+            alert = _normalize_cw_alarm(alert, timestamp)
+
         pipeline_id = alert.get("pipelineId", alert.get("pipelineID", "unknown"))
         details = alert.get("details", {})
         schedule_id = details.get("scheduleId", alert.get("scheduleID", ""))
@@ -110,6 +114,49 @@ def handler(event, context):
         _notify_slack(pipeline_id, alert_type, severity, schedule_id, timestamp, alert)
 
     return {"statusCode": 200, "processed": len(event.get("Records", []))}
+
+
+def _normalize_cw_alarm(alert, timestamp):
+    """Convert CloudWatch Alarm JSON into our standard alert schema."""
+    alarm_name = alert.get("AlarmName", "")
+    state = alert.get("NewStateValue", "ALARM")
+    reason = alert.get("NewStateReason", "")
+    description = alert.get("AlarmDescription", "")
+
+    # Determine severity from alarm state.
+    if state == "ALARM":
+        severity = "error"
+    elif state == "OK":
+        severity = "info"
+    else:
+        severity = "warning"
+
+    # Derive alert type from alarm name pattern:
+    #   {table}-{component}-errors  → lambda_error
+    #   {table}-{component}-depth   → dlq_depth
+    if alarm_name.endswith("-errors"):
+        alert_type = "lambda_error"
+    elif alarm_name.endswith("-depth"):
+        alert_type = "dlq_depth"
+    else:
+        alert_type = "cloudwatch_alarm"
+
+    # Extract component name (middle segment between table prefix and suffix).
+    parts = alarm_name.rsplit("-", 1)
+    component = parts[0].split("-", 1)[-1] if len(parts) > 1 else alarm_name
+
+    return {
+        "pipelineId": f"cloudwatch:{component}",
+        "alertType": alert_type,
+        "level": severity,
+        "message": description or reason,
+        "details": {
+            "alarmName": alarm_name,
+            "state": state,
+            "reason": reason,
+        },
+        "timestamp": timestamp,
+    }
 
 
 def _update_control(pipeline_id, alert_type, timestamp):
