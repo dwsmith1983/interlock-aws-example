@@ -15,6 +15,10 @@ resource "aws_glue_job" "etl" {
   number_of_workers = var.glue_number_workers
   timeout           = var.glue_timeout_minutes
 
+  execution_property {
+    max_concurrent_runs = var.glue_max_concurrent_runs
+  }
+
   default_arguments = {
     "--datalake-formats" = "delta"
     "--bucket"           = aws_s3_bucket.data.id
