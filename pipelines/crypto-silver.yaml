@@ -16,6 +16,10 @@ traits:
       bucket: "${BUCKET_NAME}"
       prefix: "bronze/crypto/"
       minObjects: 1
+  - type: hour-complete
+    evaluator: evaluate/hour-complete
+    config:
+      expectedCount: 100
   - type: sensor-freshness
     evaluator: builtin:sensor-freshness
     config:
@@ -39,6 +43,7 @@ trigger:
     "--par_hour": "${hour}"
 
 sla:
-  evaluationDeadline: "+20m"
-  completionDeadline: "+35m"
+  evaluationDeadline: "+15m"
+  completionDeadline: "+20m"
   validationTimeout: "+15m"
+  atRiskLeadTime: "5m"
