@@ -740,7 +740,134 @@
         }
       },
       "ResultPath": "$.completionSLA",
-      "Next": "LogCompleted",
+      "Next": "CheckQuarantine",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "AlertError"
+        }
+      ]
+    },
+    "CheckQuarantine": {
+      "Type": "Task",
+      "Resource": "${OrchestratorFunctionArn}",
+      "Parameters": {
+        "action": "checkQuarantine",
+        "pipelineID.$": "$.pipelineID",
+        "scheduleID.$": "$.scheduleID",
+        "date.$": "$.date"
+      },
+      "ResultPath": "$.checkQuarantine",
+      "Next": "HasQuarantine",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "AlertError"
+        }
+      ]
+    },
+    "HasQuarantine": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.checkQuarantine.result",
+          "StringEquals": "clean",
+          "Next": "LogCompleted"
+        },
+        {
+          "Variable": "$.checkQuarantine.result",
+          "StringEquals": "blocked",
+          "Next": "AlertQuarantine"
+        }
+      ],
+      "Default": "AlertQuarantine"
+    },
+    "AlertQuarantine": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${AlertTopicArn}",
+        "Subject.$": "States.Format('[QUARANTINE] {} / {}', $.pipelineID, $.scheduleID)",
+        "Message.$": "States.JsonToString($.checkQuarantine.payload)"
+      },
+      "ResultPath": "$.alertQuarantineResult",
+      "Next": "IsQuarantineBlocking",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.alertQuarantineFailed",
+          "Next": "IsQuarantineBlocking"
+        }
+      ]
+    },
+    "IsQuarantineBlocking": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.checkQuarantine.result",
+          "StringEquals": "blocked",
+          "Next": "LogQuarantineBlocked"
+        }
+      ],
+      "Default": "LogCompleted"
+    },
+    "LogQuarantineBlocked": {
+      "Type": "Task",
+      "Resource": "${OrchestratorFunctionArn}",
+      "Parameters": {
+        "action": "logResult",
+        "pipelineID.$": "$.pipelineID",
+        "scheduleID.$": "$.scheduleID",
+        "payload": {
+          "status": "FAILED",
+          "runID.$": "$.resolvePipeline.payload.runID",
+          "message": "pipeline blocked by quarantined records",
+          "failureCategory": "PERMANENT"
+        }
+      },
+      "ResultPath": "$.logQuarantineBlocked",
+      "Next": "ReleaseLock",
       "Retry": [
         {
           "ErrorEquals": [
