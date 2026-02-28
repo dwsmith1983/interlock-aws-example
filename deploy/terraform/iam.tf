@@ -264,6 +264,12 @@ resource "aws_iam_role_policy" "stream_router" {
         Action   = ["sns:Publish"]
         Resource = [aws_sns_topic.lifecycle.arn]
       },
+      {
+        Sid      = "SNSPublishObservability"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = [aws_sns_topic.observability.arn]
+      },
     ]
   })
 }
@@ -484,6 +490,34 @@ resource "aws_iam_role_policy" "glue" {
         Resource = [aws_dynamodb_table.main.arn]
       },
     ]
+  })
+}
+
+# --- event-exporter: S3 Write (observability staging) ---
+resource "aws_iam_role" "event_exporter" {
+  name               = "${var.table_name}-event-exporter"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "event_exporter_basic" {
+  role       = aws_iam_role.event_exporter.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "event_exporter" {
+  name = "event-exporter-policy"
+  role = aws_iam_role.event_exporter.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "S3Write"
+      Effect = "Allow"
+      Action = ["s3:PutObject"]
+      Resource = [
+        "${aws_s3_bucket.data.arn}/observability/*",
+      ]
+    }]
   })
 }
 

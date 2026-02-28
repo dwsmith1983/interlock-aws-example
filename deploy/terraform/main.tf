@@ -54,10 +54,11 @@ locals {
   }
 
   glue_jobs = {
-    "medallion-silver-earthquake" = "silver_earthquake.py"
-    "medallion-silver-crypto"     = "silver_crypto.py"
-    "medallion-gold-earthquake"   = "gold_earthquake.py"
-    "medallion-gold-crypto"       = "gold_crypto.py"
+    "medallion-silver-earthquake"  = "silver_earthquake.py"
+    "medallion-silver-crypto"      = "silver_crypto.py"
+    "medallion-gold-earthquake"    = "gold_earthquake.py"
+    "medallion-gold-crypto"        = "gold_crypto.py"
+    "medallion-compact-observability" = "compact_observability.py"
   }
 
   eventbridge_rules = {

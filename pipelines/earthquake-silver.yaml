@@ -42,6 +42,9 @@ trigger:
     "--par_day": "${date}"
     "--par_hour": "${hour}"
 
+quarantine:
+  blocking: false
+
 sla:
   evaluationDeadline: "+15m"
   completionDeadline: "+20m"

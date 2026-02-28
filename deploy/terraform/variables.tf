@@ -156,6 +156,12 @@ variable "enable_glue_trigger" {
   default     = true
 }
 
+variable "observability_compaction_schedule" {
+  description = "EventBridge schedule expression for observability compaction Glue job"
+  type        = string
+  default     = "rate(1 hour)"
+}
+
 variable "watchdog_interval" {
   description = "EventBridge schedule expression for the watchdog Lambda"
   type        = string

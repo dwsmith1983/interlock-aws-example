@@ -22,3 +22,19 @@ resource "aws_lambda_permission" "eventbridge" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.ingest[each.key].arn
 }
+
+# =============================================================================
+# Observability compaction — scheduled Glue trigger
+# =============================================================================
+
+resource "aws_glue_trigger" "compact_observability" {
+  name     = "${var.table_name}-compact-observability"
+  type     = "SCHEDULED"
+  schedule = "cron(0 * * * ? *)" # hourly at minute 0
+
+  actions {
+    job_name = aws_glue_job.etl["medallion-compact-observability"].name
+  }
+
+  start_on_creation = true
+}
