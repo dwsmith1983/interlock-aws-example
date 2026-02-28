@@ -180,7 +180,44 @@
           "Next": "EvaluateTraits"
         }
       ],
-      "Default": "ReleaseLock"
+      "Default": "LogResolveFailed"
+    },
+    "LogResolveFailed": {
+      "Type": "Task",
+      "Resource": "${OrchestratorFunctionArn}",
+      "Parameters": {
+        "action": "logResult",
+        "pipelineID.$": "$.pipelineID",
+        "scheduleID.$": "$.scheduleID",
+        "payload": {
+          "status": "FAILED",
+          "runID": "",
+          "message.$": "$.resolvePipeline.message",
+          "failureCategory": "PERMANENT"
+        }
+      },
+      "ResultPath": "$.logResolveFailed",
+      "Next": "ReleaseLock",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "AlertError"
+        }
+      ]
     },
     "EvaluateTraits": {
       "Type": "Map",
@@ -342,11 +379,28 @@
           "Variable": "$.checkReadiness.result",
           "StringEquals": "proceed",
           "Next": "TriggerPipeline"
+        },
+        {
+          "Variable": "$.checkReadiness.result",
+          "StringEquals": "error",
+          "Next": "LogEvaluatorError"
         }
       ],
-      "Default": "CheckEvalSLAForPoll"
+      "Default": "CheckIfFirstEvalAttempt"
     },
-    "LogValidationTimeout": {
+    "CheckIfFirstEvalAttempt": {
+      "Type": "Choice",
+      "Comment": "Route to LogNotReady on first eval attempt, skip re-logging on retries.",
+      "Choices": [
+        {
+          "Variable": "$.logNotReady",
+          "IsPresent": true,
+          "Next": "WaitForReadiness"
+        }
+      ],
+      "Default": "LogNotReady"
+    },
+    "LogEvaluatorError": {
       "Type": "Task",
       "Resource": "${OrchestratorFunctionArn}",
       "Parameters": {
@@ -356,11 +410,42 @@
         "payload": {
           "status": "FAILED",
           "runID.$": "$.resolvePipeline.payload.runID",
-          "message": "validation timed out - traits never became ready",
-          "failureCategory": "TIMEOUT"
+          "message": "evaluator errors — check evaluator configuration",
+          "failureCategory": "PERMANENT"
         }
       },
-      "ResultPath": "$.logValidationTimeout",
+      "ResultPath": "$.logEvaluatorError",
+      "Next": "AlertEvaluatorError",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "AlertError"
+        }
+      ]
+    },
+    "AlertEvaluatorError": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${AlertTopicArn}",
+        "Subject.$": "States.Format('[EVALUATOR ERROR] {} / {}', $.pipelineID, $.scheduleID)",
+        "Message.$": "States.JsonToString($.checkReadiness.payload)"
+      },
+      "ResultPath": "$.alertEvaluatorResult",
       "Next": "ReleaseLock",
       "Retry": [
         {
@@ -378,24 +463,26 @@
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.errorInfo",
-          "Next": "AlertError"
+          "ResultPath": "$.alertFailed",
+          "Next": "ReleaseLock"
         }
       ]
     },
-    "CheckEvalSLAForPoll": {
+    "LogNotReady": {
       "Type": "Task",
       "Resource": "${OrchestratorFunctionArn}",
       "Parameters": {
-        "action": "checkEvaluationSLA",
+        "action": "logResult",
         "pipelineID.$": "$.pipelineID",
         "scheduleID.$": "$.scheduleID",
         "payload": {
-          "executionStartTime.$": "$.executionStartTime"
+          "status": "PENDING",
+          "runID.$": "$.resolvePipeline.payload.runID",
+          "message": "not ready - blocking traits"
         }
       },
-      "ResultPath": "$.evalSLAForPoll",
-      "Next": "WaitReadiness",
+      "ResultPath": "$.logNotReady",
+      "Next": "WaitForReadiness",
       "Retry": [
         {
           "ErrorEquals": [
@@ -417,10 +504,47 @@
         }
       ]
     },
-    "WaitReadiness": {
+    "WaitForReadiness": {
       "Type": "Wait",
       "Seconds": 60,
-      "Next": "ReleaseLockForRetry"
+      "Next": "EvaluateTraits"
+    },
+    "LogValidationTimeout": {
+      "Type": "Task",
+      "Resource": "${OrchestratorFunctionArn}",
+      "Parameters": {
+        "action": "logResult",
+        "pipelineID.$": "$.pipelineID",
+        "scheduleID.$": "$.scheduleID",
+        "payload": {
+          "status": "FAILED",
+          "runID.$": "$.resolvePipeline.payload.runID",
+          "message": "validation timed out - traits never became ready",
+          "failureCategory": "TIMEOUT"
+        }
+      },
+      "ResultPath": "$.logRunFailed",
+      "Next": "IsRunRetryable",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "AlertError"
+        }
+      ]
     },
     "TriggerPipeline": {
       "Type": "Task",
@@ -616,53 +740,7 @@
         }
       },
       "ResultPath": "$.completionSLA",
-      "Next": "IsMonitoringEnabledForLog",
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 3,
-          "BackoffRate": 2
-        }
-      ],
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.errorInfo",
-          "Next": "AlertError"
-        }
-      ]
-    },
-    "IsMonitoringEnabledForLog": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.resolvePipeline.payload.monitoring",
-          "BooleanEquals": true,
-          "Next": "LogCompletedMonitoring"
-        }
-      ],
-      "Default": "LogCompleted"
-    },
-    "LogCompletedMonitoring": {
-      "Type": "Task",
-      "Resource": "${OrchestratorFunctionArn}",
-      "Parameters": {
-        "action": "logResult",
-        "pipelineID.$": "$.pipelineID",
-        "scheduleID.$": "$.scheduleID",
-        "payload": {
-          "status": "COMPLETED_MONITORING",
-          "runID.$": "$.resolvePipeline.payload.runID"
-        }
-      },
-      "ResultPath": "$.logCompleted",
-      "Next": "NotifyDownstream",
+      "Next": "LogCompleted",
       "Retry": [
         {
           "ErrorEquals": [
@@ -729,7 +807,7 @@
         "date.$": "$.date"
       },
       "ResultPath": "$.notifyDownstream",
-      "Next": "ReleaseLockSuccess",
+      "Next": "ReleaseLock",
       "Retry": [
         {
           "ErrorEquals": [
@@ -826,6 +904,13 @@
           "MaxAttempts": 3,
           "BackoffRate": 2
         }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.releaseLockRetryError",
+          "Next": "AcquireLock"
+        }
       ]
     },
     "LogTimeout": {
@@ -918,18 +1003,25 @@
           "MaxAttempts": 3,
           "BackoffRate": 2
         }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.releaseLockError",
+          "Next": "AlertReleaseLockFailed"
+        }
       ]
     },
-    "ReleaseLockSuccess": {
+    "AlertReleaseLockFailed": {
       "Type": "Task",
-      "Resource": "${OrchestratorFunctionArn}",
+      "Resource": "arn:aws:states:::sns:publish",
       "Parameters": {
-        "action": "releaseLock",
-        "pipelineID.$": "$.pipelineID",
-        "scheduleID.$": "$.scheduleID"
+        "TopicArn": "${AlertTopicArn}",
+        "Subject.$": "States.Format('[LOCK ERROR] {} / {}', $.pipelineID, $.scheduleID)",
+        "Message.$": "States.JsonToString($.releaseLockError)"
       },
-      "ResultPath": "$.releaseLockSuccess",
-      "Next": "End",
+      "ResultPath": "$.alertReleaseLockResult",
+      "End": true,
       "Retry": [
         {
           "ErrorEquals": [
@@ -946,7 +1038,7 @@
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.errorInfo",
+          "ResultPath": "$.alertReleaseLockFailed",
           "Next": "End"
         }
       ]
