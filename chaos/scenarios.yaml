@@ -86,7 +86,7 @@ scenarios:
     probability: 0.40
     target: "*"
     cooldown_minutes: 20
-    recovery_timeout_minutes: 20
+    recovery_timeout_minutes: 70
 
   - id: late-data
     category: cascade
@@ -102,7 +102,7 @@ scenarios:
     probability: 0.35
     target: "*"
     cooldown_minutes: 20
-    recovery_timeout_minutes: 20
+    recovery_timeout_minutes: 70
 
   # Category 5: Evaluator
   - id: eval-block

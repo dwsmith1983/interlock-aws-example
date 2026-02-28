@@ -8,7 +8,7 @@ Runs every chaos-controller cycle. For each unresolved chaos event:
 
 import json
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 
 import boto3
 from botocore.exceptions import ClientError
@@ -94,8 +94,9 @@ def check_recovery(table_name, now):
                            scenario, target, injected_at_str, timeout_minutes)
             continue
 
-        # Check for successful RUNLOG after injection time
-        if _has_recovered(table_name, target, injected_at):
+        # Check for recovery using scenario-specific or default checker
+        checker = _RECOVERY_CHECKERS.get(scenario, _check_default_recovery)
+        if checker(table_name, event, now):
             _update_status(table_name, pk, sk, "RECOVERED", now)
             recovered += 1
             logger.info("RECOVERED chaos event: %s on %s", scenario, target)
@@ -126,8 +127,22 @@ def _query_unresolved_events(table_name):
     return events
 
 
-def _has_recovered(table_name, target, injected_at):
-    """Check if the target pipeline has a successful RUNLOG after injection time."""
+def _check_default_recovery(table_name, event, now):
+    """Check if the target pipeline has a successful RUNLOG after injection time.
+
+    Default recovery checker: works for cas-conflict, dup-marker, eval-block,
+    eval-slow, data plane scenarios, and infrastructure scenarios.
+    """
+    target = event.get("target", {}).get("S", "")
+    injected_at_str = event.get("injectedAt", {}).get("S", "")
+    if not target or not injected_at_str:
+        return False
+
+    try:
+        injected_at = datetime.fromisoformat(injected_at_str)
+    except ValueError:
+        return False
+
     pk = f"PIPELINE#{target}"
     try:
         resp = ddb.query(
@@ -162,6 +177,68 @@ def _has_recovered(table_name, target, injected_at):
     except ClientError:
         logger.exception("error checking recovery for %s", target)
     return False
+
+
+def _check_stale_reprocess_recovery(table_name, event, now):
+    """Check recovery for stale-reprocess: COMPLETED RUNLOG for the target schedule.
+
+    Waits a 15-minute grace period after injection before declaring recovery,
+    then checks whether the specific schedule has a COMPLETED RUNLOG (system
+    either ignored the stale marker or re-ran successfully).
+    """
+    target = event.get("target", {}).get("S", "")
+    injected_at_str = event.get("injectedAt", {}).get("S", "")
+    details_str = event.get("details", {}).get("S", "{}")
+    if not target or not injected_at_str:
+        return False
+
+    try:
+        injected_at = datetime.fromisoformat(injected_at_str)
+    except ValueError:
+        return False
+
+    # Grace period: don't check until 15 minutes after injection
+    if now < injected_at + timedelta(minutes=15):
+        return False
+
+    # Parse schedule from details
+    try:
+        details = json.loads(details_str)
+    except (json.JSONDecodeError, TypeError):
+        details = {}
+    schedule_id = details.get("schedule", "")
+    if not schedule_id:
+        # Fall back to default recovery if no schedule in details
+        return _check_default_recovery(table_name, event, now)
+
+    # Check for COMPLETED RUNLOG for this specific schedule
+    date = injected_at.strftime("%Y%m%d")
+    pk = f"PIPELINE#{target}"
+    sk = f"RUNLOG#{date}#{schedule_id}"
+    try:
+        resp = ddb.get_item(
+            TableName=table_name,
+            Key={"PK": {"S": pk}, "SK": {"S": sk}},
+        )
+        item = resp.get("Item")
+        if not item:
+            return False
+        data_str = item.get("data", {}).get("S", "{}")
+        try:
+            data = json.loads(data_str)
+        except json.JSONDecodeError:
+            return False
+        return data.get("status") == "COMPLETED"
+    except ClientError:
+        logger.exception("error checking stale-reprocess recovery for %s/%s", target, schedule_id)
+    return False
+
+
+# Dispatch: scenario ID -> recovery checker function.
+# Scenarios not listed here use _check_default_recovery.
+_RECOVERY_CHECKERS = {
+    "stale-reprocess": _check_stale_reprocess_recovery,
+}
 
 
 def _update_status(table_name, pk, sk, new_status, now):

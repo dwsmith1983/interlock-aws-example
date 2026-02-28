@@ -132,6 +132,10 @@ def handler(event, context):
                 "scenario": scenario,
             }
             details = fn(ctx)
+            if isinstance(details, dict) and details.get("skipped"):
+                logger.info("scenario %s skipped on %s: %s",
+                            scenario_id, target, details.get("reason", "unknown"))
+                continue
             _record_chaos_event(scenario_id, target, details, scenario, now)
             injected.append({"scenario": scenario_id, "target": target})
             logger.info("injected chaos: %s on %s", scenario_id, target)
