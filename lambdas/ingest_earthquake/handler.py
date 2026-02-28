@@ -1,8 +1,10 @@
-"""Ingest USGS Earthquake data into bronze S3 + write MARKERs.
+"""Ingest USGS Earthquake data into bronze S3 + write hour-completion MARKERs.
 
 Triggered every 20 minutes by EventBridge. Fetches all earthquakes from the past 24 hours
 (all_day feed), groups by data-timestamp par_day/par_hour, writes JSONL to bronze, and
-writes MARKERs for each hour partition that received data.
+writes hour-completion MARKERs for past hours (not the current hour, which is still
+accumulating data). The completion MARKER triggers the DynamoDB stream → stream-router →
+SFN validation pipeline.
 
 On first invocation this naturally backfills all available hours from START_DATE onward.
 Subsequent runs add incremental data via dedup.
@@ -12,7 +14,7 @@ import json
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 from shared.helpers import (
@@ -21,7 +23,7 @@ from shared.helpers import (
     increment_hour_record_count,
     record_dedup,
     upload_to_s3,
-    write_marker,
+    write_hour_complete_marker,
     write_sensor_data,
 )
 
@@ -79,7 +81,7 @@ def handler(event, context):
 
     total_events = 0
     uris = []
-    markers_written = set()
+    current_hour = now.hour
 
     for (par_day, par_hour), feats in partitions.items():
         # Flatten features to records
@@ -110,12 +112,22 @@ def handler(event, context):
         # Increment per-hour record count sensor
         increment_hour_record_count(TABLE, f"{SOURCE}-silver", par_day, par_hour, len(records))
 
-        # Write MARKER for silver pipeline (one per hour partition)
-        schedule_id = f"h{par_hour}"
-        marker_key = (par_day, schedule_id)
-        if marker_key not in markers_written:
-            write_marker(TABLE, f"{SOURCE}-silver", SOURCE, schedule_id)
-            markers_written.add(marker_key)
+    # Write hour-completion markers for past hours that received data
+    completed_hours = set()
+    for par_day, par_hour in partitions.keys():
+        if int(par_hour) != current_hour:
+            completed_hours.add((par_day, par_hour))
+
+    # Always try previous hour (handle midnight rollover)
+    prev_hour = (current_hour - 1) % 24
+    if current_hour == 0:
+        prev_day = (now - timedelta(days=1)).strftime("%Y%m%d")
+    else:
+        prev_day = now.strftime("%Y%m%d")
+    completed_hours.add((prev_day, f"{prev_hour:02d}"))
+
+    for par_day, par_hour in completed_hours:
+        write_hour_complete_marker(TABLE, f"{SOURCE}-silver", SOURCE, par_day, par_hour)
 
     # Write sensor data for builtin evaluators
     if total_events > 0:
