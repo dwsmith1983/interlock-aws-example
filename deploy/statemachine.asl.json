@@ -134,6 +134,48 @@
         {
           "Variable": "$.checkRunLog.result",
           "StringEquals": "proceed",
+          "Next": "CheckCircuitBreaker"
+        }
+      ],
+      "Default": "ReleaseLock"
+    },
+    "CheckCircuitBreaker": {
+      "Type": "Task",
+      "Resource": "${OrchestratorFunctionArn}",
+      "Parameters": {
+        "action": "checkCircuitBreaker",
+        "pipelineID.$": "$.pipelineID",
+        "scheduleID.$": "$.scheduleID"
+      },
+      "ResultPath": "$.checkCircuitBreaker",
+      "Next": "ShouldProceedAfterCircuitBreaker",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.errorInfo",
+          "Next": "AlertError"
+        }
+      ]
+    },
+    "ShouldProceedAfterCircuitBreaker": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.checkCircuitBreaker.result",
+          "StringEquals": "proceed",
           "Next": "ResolvePipeline"
         }
       ],
