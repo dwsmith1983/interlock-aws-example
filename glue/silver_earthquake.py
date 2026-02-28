@@ -76,9 +76,9 @@ df = df.withColumn("event_time", F.to_timestamp("event_time")) \
        .withColumn("updated_time", F.to_timestamp("updated_time")) \
        .withColumn("ingested_at", F.to_timestamp("ingested_at"))
 
-# Add partition columns
+# Add partition column + hour lineage column (not a partition in silver)
 df = df.withColumn("par_day", F.lit(par_day)) \
-       .withColumn("par_hour", F.lit(par_hour))
+       .withColumn("hour", F.lit(par_hour))
 
 # Dedup by earthquake_id, keeping the latest by updated_time
 window = Window.partitionBy("earthquake_id").orderBy(F.col("updated_time").desc())
