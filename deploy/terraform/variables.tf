@@ -104,6 +104,12 @@ variable "glue_timeout_minutes" {
   default     = 30
 }
 
+variable "glue_max_concurrent_runs" {
+  description = "Max concurrent runs per Glue job"
+  type        = number
+  default     = 10
+}
+
 # Pipeline start date (YYYYMMDD) — first kick backfills from this date hour 00
 variable "pipeline_start_date" {
   description = "Start date for pipeline schedules (YYYYMMDD). First ingestion backfills from this date."
