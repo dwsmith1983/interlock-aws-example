@@ -5,6 +5,7 @@ import type {
   PipelineStatus,
   JobLog,
   RunLog,
+  RunHistory,
   ChaosEvent,
   ChaosConfig,
   Alert,
@@ -54,6 +55,14 @@ export function usePipelineRunlogs(id: string) {
     fetcher,
     SWR_OPTIONS
   );
+}
+
+export function usePipelineHistory(id: string, date: string, scheduleId: string) {
+  const key =
+    date && scheduleId
+      ? `${API_BASE}/pipelines/${id}/history?date=${date}&schedule=${scheduleId}`
+      : null;
+  return useSWR<RunHistory>(key, fetcher, SWR_OPTIONS);
 }
 
 export function useChaosEvents() {

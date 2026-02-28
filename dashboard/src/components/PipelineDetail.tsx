@@ -109,19 +109,31 @@ export function PipelineDetail({ id }: { id: string }) {
             Recent Run Logs
           </h2>
           <div className="space-y-2">
-            {runlogs.slice(0, 20).map((rl, i) => (
-              <div
-                key={rl.SK || i}
-                className="flex items-center justify-between rounded border border-gray-100 px-3 py-2 text-sm"
-              >
-                <span className="font-mono text-xs text-gray-500">
-                  {rl.SK}
-                </span>
-                <span className="text-xs text-gray-400">
-                  {rl.timestamp || ""}
-                </span>
-              </div>
-            ))}
+            {runlogs.slice(0, 20).map((rl, i) => {
+              const skParts = rl.SK?.replace("RUNLOG#", "").split("#") || [];
+              const date = skParts[0] || "";
+              const scheduleId = skParts.slice(1).join("#") || "";
+              const runStatus = rl.runData?.status as string | undefined;
+              return (
+                <Link
+                  key={rl.SK || i}
+                  href={`/pipeline/${id}/history?date=${date}&schedule=${scheduleId}`}
+                  className="flex items-center justify-between rounded border border-gray-100 px-3 py-2 text-sm hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-gray-500">
+                      {rl.SK}
+                    </span>
+                    {runStatus && (
+                      <StatusBadge status={runStatus} />
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {rl.timestamp || ""}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </section>
       )}
