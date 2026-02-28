@@ -43,7 +43,6 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   }
 
   alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
 # --- DLQ depth alarms ---
@@ -66,7 +65,6 @@ resource "aws_cloudwatch_metric_alarm" "dlq_depth" {
   }
 
   alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
 }
 
 # =============================================================================
