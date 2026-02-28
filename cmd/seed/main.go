@@ -24,11 +24,11 @@ import (
 
 // pipelineFile is the on-disk YAML format (before schedule generation).
 type pipelineFile struct {
-	ID          string                 `yaml:"id"`
-	Name        string                 `yaml:"name"`
-	Description string                 `yaml:"description"`
-	Archetype   string                 `yaml:"archetype"`
-	Traits      []traitOverride        `yaml:"traits"`
+	ID          string                     `yaml:"id"`
+	Name        string                     `yaml:"name"`
+	Description string                     `yaml:"description"`
+	Archetype   string                     `yaml:"archetype"`
+	Traits      []traitOverride            `yaml:"traits"`
 	Trigger     *types.TriggerConfig       `yaml:"trigger"`
 	SLA         *types.SLAConfig           `yaml:"sla"`
 	Watch       *types.PipelineWatchConfig `yaml:"watch"`
