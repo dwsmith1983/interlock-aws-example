@@ -42,6 +42,10 @@ def update_hourly_sensor(
 ) -> None:
     """Update the hourly-status sensor in Interlock control table.
 
+    Sensor fields are stored inside a "data" map attribute to match the
+    framework's canonical ControlRecord format. The stream-router unwraps
+    this map when evaluating trigger conditions.
+
     Uses DynamoDB UpdateItem with ADD to atomically increment count and files_processed.
     Sets complete=true when files_processed reaches 4.
     """
@@ -69,7 +73,7 @@ def update_hourly_sensor(
         ExpressionAttributeValues={":empty_map": {"M": {}}},
     )
 
-    # Atomic increment of count and files_processed
+    # Atomic increment of count and files_processed inside the data map
     resp = _dynamodb.update_item(
         TableName=_CONTROL_TABLE,
         Key=key,
@@ -95,7 +99,7 @@ def update_hourly_sensor(
         ReturnValues="ALL_NEW",
     )
 
-    # Check if files_processed reached 4 → set complete flag + pct_of_expected
+    # Read back values from the data map
     attrs = resp.get("Attributes", {})
     data = attrs.get("data", {}).get("M", {})
     files_processed = int(data.get("files_processed", {}).get("N", "0"))
