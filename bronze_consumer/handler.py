@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import re
 
 from bronze_consumer.delta_writer import write_bronze_cdr, write_bronze_seq
 from bronze_consumer.hasher import PhoneHasher
@@ -10,6 +11,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 _hasher = PhoneHasher()
+
+_PARTITION_RE = re.compile(r"par_day=(\d{8})/par_hour=(\d{2})")
 
 
 def lambda_handler(event: dict, context) -> dict:
@@ -39,7 +42,14 @@ def lambda_handler(event: dict, context) -> dict:
                 logger.info("Skipping non-JSONL file: %s", key)
                 continue
 
-            logger.info("Processing %s: s3://%s/%s", stream, bucket, key)
+            # Extract par_day/par_hour from S3 key (authoritative source)
+            m = _PARTITION_RE.search(key)
+            if not m:
+                logger.warning("Cannot extract partition from key: %s", key)
+                continue
+            par_day, par_hour = m.group(1), m.group(2)
+
+            logger.info("Processing %s: s3://%s/%s (par_day=%s, par_hour=%s)", stream, bucket, key, par_day, par_hour)
             records = read_jsonl_gz(bucket, key)
 
             if not records:
@@ -53,11 +63,11 @@ def lambda_handler(event: dict, context) -> dict:
                     phones.add(rec["phone_out"])
                     phones.add(rec["phone_in"])
                 phone_hashes = _hasher.hash_phones(list(phones))
-                written = write_bronze_cdr(records, phone_hashes, bucket)
+                written = write_bronze_cdr(records, phone_hashes, bucket, par_day, par_hour)
             else:
                 phones = {rec["phone_number"] for rec in records}
                 phone_hashes = _hasher.hash_phones(list(phones))
-                written = write_bronze_seq(records, phone_hashes, bucket)
+                written = write_bronze_seq(records, phone_hashes, bucket, par_day, par_hour)
 
             logger.info("Wrote %d bronze records for %s", written, key)
             processed += 1

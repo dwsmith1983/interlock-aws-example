@@ -43,26 +43,26 @@ class PhoneHasher:
         # Deduplicate before querying DynamoDB
         uncached = list(set(uncached))
 
-        # BatchGetItem — up to 100 keys per call
+        # BatchGetItem via high-level resource API (up to 100 keys per call)
         still_missing: list[str] = []
         for i in range(0, len(uncached), 100):
             batch = uncached[i : i + 100]
-            resp = _dynamodb.meta.client.batch_get_item(
+            resp = _dynamodb.batch_get_item(
                 RequestItems={
                     _TABLE_NAME: {
-                        "Keys": [{"phone": {"S": p}} for p in batch],
+                        "Keys": [{"phone": p} for p in batch],
                         "ProjectionExpression": "phone, #h",
                         "ExpressionAttributeNames": {"#h": "hash"},
                     }
                 }
             )
             for item in resp.get("Responses", {}).get(_TABLE_NAME, []):
-                phone = item["phone"]["S"]
-                h = item["hash"]["S"]
+                phone = item["phone"]
+                h = item["hash"]
                 _cache[phone] = h
                 result[phone] = h
 
-            found = {item["phone"]["S"] for item in resp.get("Responses", {}).get(_TABLE_NAME, [])}
+            found = {item["phone"] for item in resp.get("Responses", {}).get(_TABLE_NAME, [])}
             still_missing.extend(p for p in batch if p not in found)
 
         if not still_missing:
@@ -70,26 +70,15 @@ class PhoneHasher:
 
         # Compute hashes for missing phones and write to DynamoDB
         now = datetime.now(timezone.utc).isoformat()
-        new_items: list[dict] = []
-        for phone in still_missing:
-            h = _compute_hash(phone)
-            _cache[phone] = h
-            result[phone] = h
-            new_items.append({
-                "PutRequest": {
-                    "Item": {
-                        "phone": {"S": phone},
-                        "hash": {"S": h},
-                        "created_at": {"S": now},
-                    }
-                }
-            })
-
-        # BatchWriteItem — up to 25 items per call
-        for i in range(0, len(new_items), 25):
-            batch = new_items[i : i + 25]
-            _dynamodb.meta.client.batch_write_item(
-                RequestItems={_TABLE_NAME: batch}
-            )
+        with self._table.batch_writer() as writer:
+            for phone in still_missing:
+                h = _compute_hash(phone)
+                _cache[phone] = h
+                result[phone] = h
+                writer.put_item(Item={
+                    "phone": phone,
+                    "hash": h,
+                    "created_at": now,
+                })
 
         return result

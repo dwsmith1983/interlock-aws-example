@@ -66,20 +66,7 @@ resource "aws_iam_role_policy" "glue_logs" {
 }
 
 # Upload Glue scripts to S3
-resource "aws_s3_object" "glue_components" {
-  bucket = aws_s3_bucket.telecom_data.id
-  key    = "glue_scripts/glue_jobs/components.py"
-  source = "${path.module}/../../glue_jobs/components.py"
-  etag   = filemd5("${path.module}/../../glue_jobs/components.py")
-}
-
-resource "aws_s3_object" "glue_init" {
-  bucket  = aws_s3_bucket.telecom_data.id
-  key     = "glue_scripts/glue_jobs/__init__.py"
-  content = ""
-  etag    = md5("")
-}
-
+# Entry point scripts (referenced by script_location)
 resource "aws_s3_object" "glue_cdr_agg_hour" {
   bucket = aws_s3_bucket.telecom_data.id
   key    = "glue_scripts/cdr_agg_hour.py"
@@ -108,6 +95,14 @@ resource "aws_s3_object" "glue_seq_agg_day" {
   etag   = filemd5("${path.module}/../../glue_jobs/seq_agg_day.py")
 }
 
+# glue_jobs package zip (components + args as --extra-py-files)
+resource "aws_s3_object" "glue_jobs_zip" {
+  bucket = aws_s3_bucket.telecom_data.id
+  key    = "glue_scripts/glue_jobs.zip"
+  source = "${path.module}/../../build/glue_jobs.zip"
+  etag   = filemd5("${path.module}/../../build/glue_jobs.zip")
+}
+
 # Upload pyspark-pipeline-framework wheel
 resource "aws_s3_object" "ppf_wheel" {
   bucket = aws_s3_bucket.telecom_data.id
@@ -132,7 +127,8 @@ resource "aws_glue_job" "cdr_agg_hour" {
 
   default_arguments = {
     "--datalake-formats"              = "delta"
-    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs/components.py"
+    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs.zip"
+    "--additional-python-modules"     = "dataconf>=3.4,structlog>=23.0"
     "--enable-continuous-cloudwatch-log" = "true"
     "--job-language"                   = "python"
   }
@@ -157,7 +153,8 @@ resource "aws_glue_job" "cdr_agg_day" {
 
   default_arguments = {
     "--datalake-formats"              = "delta"
-    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs/components.py"
+    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs.zip"
+    "--additional-python-modules"     = "dataconf>=3.4,structlog>=23.0"
     "--enable-continuous-cloudwatch-log" = "true"
     "--job-language"                   = "python"
   }
@@ -182,7 +179,8 @@ resource "aws_glue_job" "seq_agg_hour" {
 
   default_arguments = {
     "--datalake-formats"              = "delta"
-    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs/components.py"
+    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs.zip"
+    "--additional-python-modules"     = "dataconf>=3.4,structlog>=23.0"
     "--enable-continuous-cloudwatch-log" = "true"
     "--job-language"                   = "python"
   }
@@ -207,7 +205,8 @@ resource "aws_glue_job" "seq_agg_day" {
 
   default_arguments = {
     "--datalake-formats"              = "delta"
-    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs/components.py"
+    "--extra-py-files"                = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/ppf.whl,s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/glue_jobs.zip"
+    "--additional-python-modules"     = "dataconf>=3.4,structlog>=23.0"
     "--enable-continuous-cloudwatch-log" = "true"
     "--job-language"                   = "python"
   }

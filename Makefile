@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel upload-glue-scripts build-all tf-init tf-apply tf-destroy clean
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs upload-glue-scripts build-all tf-init tf-apply tf-destroy clean
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -30,13 +30,19 @@ build-ppf-wheel:
 	@mv $(BUILD_DIR)/pyspark_pipeline_framework-*.whl $(BUILD_DIR)/ppf.whl
 	@echo "Built $(BUILD_DIR)/ppf.whl"
 
+build-glue-jobs:
+	@echo "Packaging glue_jobs module..."
+	@mkdir -p $(BUILD_DIR)
+	@zip -r $(BUILD_DIR)/glue_jobs.zip $(GLUE_DIR) -x '$(GLUE_DIR)/__pycache__/*' '*.pyc'
+	@echo "Built $(BUILD_DIR)/glue_jobs.zip"
+
 upload-glue-scripts:
 	@echo "Uploading Glue scripts..."
 	@$(eval BUCKET := $(shell cd $(DEPLOY_DIR) && terraform output -raw telecom_data_bucket))
 	aws s3 sync $(GLUE_DIR)/ s3://$(BUCKET)/glue_scripts/glue_jobs/ --exclude '__pycache__/*' --exclude '*.pyc'
 	@echo "Uploaded to s3://$(BUCKET)/glue_scripts/"
 
-build-all: build-generator build-bronze build-ppf-wheel
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:

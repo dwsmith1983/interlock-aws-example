@@ -1,6 +1,6 @@
-# IAM role for EventBridge to start Glue jobs
-resource "aws_iam_role" "eventbridge_glue" {
-  name = "${var.environment}-eventbridge-glue-role"
+# IAM role for EventBridge Scheduler to start Glue jobs
+resource "aws_iam_role" "scheduler_glue" {
+  name = "${var.environment}-scheduler-glue-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -9,16 +9,16 @@ resource "aws_iam_role" "eventbridge_glue" {
         Action = "sts:AssumeRole"
         Effect = "Allow"
         Principal = {
-          Service = "events.amazonaws.com"
+          Service = "scheduler.amazonaws.com"
         }
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy" "eventbridge_glue" {
+resource "aws_iam_role_policy" "scheduler_glue" {
   name = "glue-start-job"
-  role = aws_iam_role.eventbridge_glue.id
+  role = aws_iam_role.scheduler_glue.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -37,70 +37,100 @@ resource "aws_iam_role_policy" "eventbridge_glue" {
   })
 }
 
-# Hourly schedules — run at :05 past the hour to allow bronze writes to settle
-resource "aws_cloudwatch_event_rule" "cdr_agg_hour" {
-  name                = "${var.environment}-cdr-agg-hour"
-  schedule_expression = "cron(5 * * * ? *)"
-  description         = "Trigger CDR hourly aggregation"
+# Hourly schedules — run at :05 past the hour
+resource "aws_scheduler_schedule" "cdr_agg_hour" {
+  name       = "${var.environment}-cdr-agg-hour"
+  group_name = "default"
+
+  schedule_expression          = "cron(5 * * * ? *)"
+  schedule_expression_timezone = "UTC"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:glue:startJobRun"
+    role_arn = aws_iam_role.scheduler_glue.arn
+
+    input = jsonencode({
+      JobName   = aws_glue_job.cdr_agg_hour.name
+      Arguments = {
+        "--s3_bucket" = aws_s3_bucket.telecom_data.id
+      }
+    })
+  }
 }
 
-resource "aws_cloudwatch_event_rule" "seq_agg_hour" {
-  name                = "${var.environment}-seq-agg-hour"
-  schedule_expression = "cron(5 * * * ? *)"
-  description         = "Trigger SEQ hourly aggregation"
+resource "aws_scheduler_schedule" "seq_agg_hour" {
+  name       = "${var.environment}-seq-agg-hour"
+  group_name = "default"
+
+  schedule_expression          = "cron(5 * * * ? *)"
+  schedule_expression_timezone = "UTC"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:glue:startJobRun"
+    role_arn = aws_iam_role.scheduler_glue.arn
+
+    input = jsonencode({
+      JobName   = aws_glue_job.seq_agg_hour.name
+      Arguments = {
+        "--s3_bucket" = aws_s3_bucket.telecom_data.id
+      }
+    })
+  }
 }
 
 # Daily schedules — run at 1:05 AM UTC
-resource "aws_cloudwatch_event_rule" "cdr_agg_day" {
-  name                = "${var.environment}-cdr-agg-day"
-  schedule_expression = "cron(5 1 * * ? *)"
-  description         = "Trigger CDR daily aggregation"
+resource "aws_scheduler_schedule" "cdr_agg_day" {
+  name       = "${var.environment}-cdr-agg-day"
+  group_name = "default"
+
+  schedule_expression          = "cron(5 1 * * ? *)"
+  schedule_expression_timezone = "UTC"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:glue:startJobRun"
+    role_arn = aws_iam_role.scheduler_glue.arn
+
+    input = jsonencode({
+      JobName   = aws_glue_job.cdr_agg_day.name
+      Arguments = {
+        "--s3_bucket" = aws_s3_bucket.telecom_data.id
+      }
+    })
+  }
 }
 
-resource "aws_cloudwatch_event_rule" "seq_agg_day" {
-  name                = "${var.environment}-seq-agg-day"
-  schedule_expression = "cron(5 1 * * ? *)"
-  description         = "Trigger SEQ daily aggregation"
-}
+resource "aws_scheduler_schedule" "seq_agg_day" {
+  name       = "${var.environment}-seq-agg-day"
+  group_name = "default"
 
-# Targets — EventBridge → Glue StartJobRun
-# Glue jobs compute par_day/par_hour from current time when not provided
-resource "aws_cloudwatch_event_target" "cdr_agg_hour" {
-  rule     = aws_cloudwatch_event_rule.cdr_agg_hour.name
-  arn      = aws_glue_job.cdr_agg_hour.arn
-  role_arn = aws_iam_role.eventbridge_glue.arn
+  schedule_expression          = "cron(5 1 * * ? *)"
+  schedule_expression_timezone = "UTC"
 
-  input = jsonencode({
-    "--s3_bucket" = aws_s3_bucket.telecom_data.id
-  })
-}
+  flexible_time_window {
+    mode = "OFF"
+  }
 
-resource "aws_cloudwatch_event_target" "seq_agg_hour" {
-  rule     = aws_cloudwatch_event_rule.seq_agg_hour.name
-  arn      = aws_glue_job.seq_agg_hour.arn
-  role_arn = aws_iam_role.eventbridge_glue.arn
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:glue:startJobRun"
+    role_arn = aws_iam_role.scheduler_glue.arn
 
-  input = jsonencode({
-    "--s3_bucket" = aws_s3_bucket.telecom_data.id
-  })
-}
-
-resource "aws_cloudwatch_event_target" "cdr_agg_day" {
-  rule     = aws_cloudwatch_event_rule.cdr_agg_day.name
-  arn      = aws_glue_job.cdr_agg_day.arn
-  role_arn = aws_iam_role.eventbridge_glue.arn
-
-  input = jsonencode({
-    "--s3_bucket" = aws_s3_bucket.telecom_data.id
-  })
-}
-
-resource "aws_cloudwatch_event_target" "seq_agg_day" {
-  rule     = aws_cloudwatch_event_rule.seq_agg_day.name
-  arn      = aws_glue_job.seq_agg_day.arn
-  role_arn = aws_iam_role.eventbridge_glue.arn
-
-  input = jsonencode({
-    "--s3_bucket" = aws_s3_bucket.telecom_data.id
-  })
+    input = jsonencode({
+      JobName   = aws_glue_job.seq_agg_day.name
+      Arguments = {
+        "--s3_bucket" = aws_s3_bucket.telecom_data.id
+      }
+    })
+  }
 }
