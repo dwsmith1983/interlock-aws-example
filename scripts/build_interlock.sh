@@ -9,10 +9,10 @@ mkdir -p "$BUILD_DIR"
 
 for handler in stream-router orchestrator sla-monitor watchdog; do
     echo "Building $handler..."
-    cd "$INTERLOCK_DIR"
-    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap "./cmd/lambda/$handler"
-    cd -
-    cp "$INTERLOCK_DIR/bootstrap" "$BUILD_DIR/"
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+        -C "$INTERLOCK_DIR" \
+        -o "$PWD/$BUILD_DIR/bootstrap" \
+        "./cmd/lambda/$handler"
     (cd "$BUILD_DIR" && zip -j "$handler.zip" bootstrap && rm bootstrap)
     echo "  -> $BUILD_DIR/$handler.zip"
 done
