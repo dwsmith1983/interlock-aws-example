@@ -54,3 +54,41 @@ variable "log_retention_days" {
   type        = number
   default     = 7
 }
+
+# Bronze consumer
+variable "phone_hash_salt" {
+  description = "Salt for SHA-256 phone number hashing"
+  type        = string
+  sensitive   = true
+}
+
+variable "bronze_memory_mb" {
+  description = "Memory allocation for the bronze consumer Lambda in MB"
+  type        = number
+  default     = 2048
+}
+
+variable "bronze_timeout_s" {
+  description = "Timeout for the bronze consumer Lambda in seconds"
+  type        = number
+  default     = 300
+}
+
+# Glue
+variable "glue_worker_type" {
+  description = "Glue worker type for aggregation jobs"
+  type        = string
+  default     = "G.1X"
+}
+
+variable "glue_hourly_workers" {
+  description = "Number of Glue workers for hourly aggregation jobs"
+  type        = number
+  default     = 2
+}
+
+variable "glue_daily_workers" {
+  description = "Number of Glue workers for daily aggregation jobs"
+  type        = number
+  default     = 5
+}

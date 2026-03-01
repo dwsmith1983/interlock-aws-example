@@ -17,3 +17,28 @@ output "generator_function_arn" {
   description = "ARN of the telecom generator Lambda function"
   value       = aws_lambda_function.telecom_generator.arn
 }
+
+output "kinesis_stream_name" {
+  description = "Name of the Kinesis stream for raw S3 events"
+  value       = aws_kinesis_stream.raw_events.name
+}
+
+output "bronze_function_name" {
+  description = "Name of the bronze consumer Lambda function"
+  value       = aws_lambda_function.bronze_consumer.function_name
+}
+
+output "phone_hash_table_name" {
+  description = "Name of the phone hash DynamoDB table"
+  value       = aws_dynamodb_table.phone_hash.name
+}
+
+output "glue_job_names" {
+  description = "Names of the Glue aggregation jobs"
+  value = {
+    cdr_agg_hour = aws_glue_job.cdr_agg_hour.name
+    cdr_agg_day  = aws_glue_job.cdr_agg_day.name
+    seq_agg_hour = aws_glue_job.seq_agg_hour.name
+    seq_agg_day  = aws_glue_job.seq_agg_day.name
+  }
+}
