@@ -6,6 +6,7 @@ import re
 from bronze_consumer.delta_writer import write_bronze_cdr, write_bronze_seq
 from bronze_consumer.hasher import PhoneHasher
 from bronze_consumer.s3_reader import read_jsonl_gz
+from bronze_consumer.sensor import update_hourly_sensor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -70,6 +71,7 @@ def lambda_handler(event: dict, context) -> dict:
                 written = write_bronze_seq(records, phone_hashes, bucket, par_day, par_hour)
 
             logger.info("Wrote %d bronze records for %s", written, key)
+            update_hourly_sensor(stream, par_day, par_hour, written)
             processed += 1
 
         except Exception:
