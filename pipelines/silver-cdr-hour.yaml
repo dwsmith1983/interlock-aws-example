@@ -1,0 +1,34 @@
+pipeline:
+  id: silver-cdr-hour
+  owner: data-platform
+  description: Silver CDR hourly aggregation — triggered by bronze completion
+
+schedule:
+  trigger:
+    key: hourly-status
+    check: equals
+    field: complete
+    value: true
+  evaluation:
+    window: 15m
+    interval: 2m
+
+sla:
+  deadline: ":30"
+  expectedDuration: 10m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: hourly-status
+      check: gte
+      field: pct_of_expected
+      value: 0.7
+
+job:
+  type: glue
+  config:
+    jobName: "${environment}-cdr-agg-hour"
+    arguments:
+      "--s3_bucket": "${s3_bucket}"
+  maxRetries: 2

@@ -1,0 +1,41 @@
+pipeline:
+  id: bronze-seq
+  owner: data-platform
+  description: Bronze SEQ audit — validates raw-to-bronze processing completeness
+
+schedule:
+  cron: "10 * * * *"
+  timezone: UTC
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: ":15"
+  expectedDuration: 3m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: hourly-status
+      check: equals
+      field: complete
+      value: true
+    - key: hourly-status
+      check: gte
+      field: pct_of_expected
+      value: 0.7
+
+job:
+  type: http
+  config:
+    method: POST
+    url: "${audit_function_url}"
+    timeout: 60
+
+postRun:
+  rules:
+    - key: audit-result
+      check: equals
+      field: match
+      value: true
