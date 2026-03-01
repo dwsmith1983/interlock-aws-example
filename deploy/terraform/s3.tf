@@ -21,6 +21,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "telecom_data" {
   }
 }
 
+resource "aws_s3_bucket_notification" "telecom_data" {
+  bucket      = aws_s3_bucket.telecom_data.id
+  eventbridge = true
+}
+
 resource "aws_s3_bucket_public_access_block" "telecom_data" {
   bucket = aws_s3_bucket.telecom_data.id
 
