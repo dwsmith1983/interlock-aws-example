@@ -14,9 +14,12 @@ resource "aws_lambda_function" "bronze_consumer" {
 
   environment {
     variables = {
-      S3_BUCKET        = aws_s3_bucket.telecom_data.id
-      PHONE_HASH_TABLE = aws_dynamodb_table.phone_hash.name
-      PHONE_HASH_SALT  = var.phone_hash_salt
+      S3_BUCKET               = aws_s3_bucket.telecom_data.id
+      PHONE_HASH_TABLE        = aws_dynamodb_table.phone_hash.name
+      PHONE_HASH_SALT         = var.phone_hash_salt
+      INTERLOCK_CONTROL_TABLE = module.interlock.control_table_name
+      CDR_DAILY_TARGET        = tostring(var.cdr_daily_target)
+      SEQ_DAILY_TARGET        = tostring(var.seq_daily_target)
     }
   }
 }
@@ -160,6 +163,20 @@ resource "aws_iam_role_policy" "bronze_consumer_sqs" {
         Resource = aws_sqs_queue.bronze_dlq.arn
       }
     ]
+  })
+}
+
+resource "aws_iam_role_policy" "bronze_consumer_interlock" {
+  name = "interlock-control-table"
+  role = aws_iam_role.bronze_consumer.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action   = ["dynamodb:UpdateItem", "dynamodb:PutItem"]
+      Effect   = "Allow"
+      Resource = module.interlock.control_table_arn
+    }]
   })
 }
 
