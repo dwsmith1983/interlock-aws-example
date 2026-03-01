@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock upload-glue-scripts build-all tf-init tf-apply tf-destroy clean
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit upload-glue-scripts build-all tf-init tf-apply tf-destroy clean
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -46,7 +46,13 @@ build-interlock:
 	@echo "Building Interlock Lambda binaries..."
 	@scripts/build_interlock.sh
 
-build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock
+build-audit:
+	@echo "Packaging bronze-audit Lambda..."
+	@mkdir -p $(BUILD_DIR)
+	@zip -r $(BUILD_DIR)/bronze-audit.zip audit -x 'audit/__pycache__/*' '*.pyc'
+	@echo "Built $(BUILD_DIR)/bronze-audit.zip"
+
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:
