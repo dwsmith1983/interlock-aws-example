@@ -7,7 +7,7 @@ DEPLOY_DIR := deploy/terraform
 build-generator:
 	@echo "Packaging telecom-generator Lambda..."
 	@mkdir -p $(BUILD_DIR)
-	@cd $(GENERATOR_DIR) && zip -r ../$(BUILD_DIR)/telecom-generator.zip . -x '__pycache__/*' '*.pyc'
+	@zip -r $(BUILD_DIR)/telecom-generator.zip $(GENERATOR_DIR) -x '$(GENERATOR_DIR)/__pycache__/*' '*.pyc'
 	@echo "Built $(BUILD_DIR)/telecom-generator.zip"
 
 tf-init:

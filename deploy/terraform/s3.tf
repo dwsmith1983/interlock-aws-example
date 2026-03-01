@@ -13,6 +13,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "telecom_data" {
     id     = "expire-old-data"
     status = "Enabled"
 
+    filter {}
+
     expiration {
       days = var.data_retention_days
     }
