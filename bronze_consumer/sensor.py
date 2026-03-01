@@ -55,14 +55,24 @@ def update_hourly_sensor(
     expected = _expected_hourly_count(daily_target, hour_int)
 
     now = datetime.now(timezone.utc).isoformat()
+    key = {
+        "PK": {"S": f"PIPELINE#{pipeline_id}"},
+        "SK": {"S": "SENSOR#hourly-status"},
+    }
+
+    # Ensure the data map exists (no-op if it already does)
+    _dynamodb.update_item(
+        TableName=_CONTROL_TABLE,
+        Key=key,
+        UpdateExpression="SET #data = if_not_exists(#data, :empty_map)",
+        ExpressionAttributeNames={"#data": "data"},
+        ExpressionAttributeValues={":empty_map": {"M": {}}},
+    )
 
     # Atomic increment of count and files_processed
     resp = _dynamodb.update_item(
         TableName=_CONTROL_TABLE,
-        Key={
-            "PK": {"S": f"PIPELINE#{pipeline_id}"},
-            "SK": {"S": "SENSOR#hourly-status"},
-        },
+        Key=key,
         UpdateExpression=(
             "SET #data.#date = :date, #data.#hour = :hour, "
             "#data.expected_count = :expected, #data.updatedAt = :now "
@@ -95,10 +105,7 @@ def update_hourly_sensor(
         pct = total_count / expected if expected > 0 else 0.0
         _dynamodb.update_item(
             TableName=_CONTROL_TABLE,
-            Key={
-                "PK": {"S": f"PIPELINE#{pipeline_id}"},
-                "SK": {"S": "SENSOR#hourly-status"},
-            },
+            Key=key,
             UpdateExpression=(
                 "SET #data.complete = :complete, #data.pct_of_expected = :pct"
             ),
