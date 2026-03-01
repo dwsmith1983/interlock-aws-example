@@ -20,6 +20,6 @@ resource "aws_dynamodb_table_item" "pipeline_config" {
   item = jsonencode({
     PK     = { S = "PIPELINE#${trimsuffix(each.value, ".yaml")}" }
     SK     = { S = "CONFIG" }
-    config = { S = templatefile("${path.module}/../../pipelines/${each.value}", local.pipeline_template_vars) }
+    config = { S = jsonencode(yamldecode(templatefile("${path.module}/../../pipelines/${each.value}", local.pipeline_template_vars))) }
   })
 }
