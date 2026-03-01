@@ -32,7 +32,7 @@ def handler(event, context):
     """API Gateway proxy handler — routes to the correct evaluator.
 
     The interlock HTTPRunner sends EvaluatorInput:
-        {"pipelineID": "...", "traitType": "...", "config": {...}}
+        {"pipelineId": "...", "traitType": "...", "config": {...}}
     The trait config is nested under "config".  scheduleID (e.g. "h15")
     may be injected by the orchestrator; we parse it into an integer hour.
     """
@@ -41,7 +41,8 @@ def handler(event, context):
 
     # Extract nested config from EvaluatorInput format.
     config = body.get("config", body)
-    pipeline_id = body.get("pipelineID", config.get("pipelineID", "unknown"))
+    pipeline_id = body.get("pipelineId", body.get("pipelineID",
+                   config.get("pipelineId", config.get("pipelineID", "unknown"))))
     trait_type = body.get("traitType", "")
 
     # Derive hour from scheduleID (e.g. "h15" → 15) if present.
