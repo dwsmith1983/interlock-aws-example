@@ -9,12 +9,16 @@ echo "Building Delta Lake Lambda layer for arm64..."
 rm -rf "${BUILD_DIR}/delta-layer"
 mkdir -p "${BUILD_DIR}/delta-layer"
 
+# Install packages inside Docker (arm64 Linux binaries), output to mounted volume
 docker run --rm --platform linux/arm64 \
+  --entrypoint bash \
   -v "${BUILD_DIR}/delta-layer:/out" \
   public.ecr.aws/lambda/python:3.12-arm64 \
-  bash -c 'pip install pyarrow deltalake -t /out/python && cd /out && zip -r9 delta-lake-layer.zip python'
+  -c 'pip install pyarrow deltalake -t /out/python'
 
-mv "${BUILD_DIR}/delta-layer/delta-lake-layer.zip" "${BUILD_DIR}/delta-lake-layer.zip"
+# Zip on host (zip is available on macOS)
+cd "${BUILD_DIR}/delta-layer"
+zip -r9 "${BUILD_DIR}/delta-lake-layer.zip" python
+
 rm -rf "${BUILD_DIR}/delta-layer"
-
 echo "Built ${BUILD_DIR}/delta-lake-layer.zip"
