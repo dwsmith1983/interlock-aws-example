@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs upload-glue-scripts build-all tf-init tf-apply tf-destroy clean
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock upload-glue-scripts build-all tf-init tf-apply tf-destroy clean
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -42,7 +42,11 @@ upload-glue-scripts:
 	aws s3 sync $(GLUE_DIR)/ s3://$(BUCKET)/glue_scripts/glue_jobs/ --exclude '__pycache__/*' --exclude '*.pyc'
 	@echo "Uploaded to s3://$(BUCKET)/glue_scripts/"
 
-build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs
+build-interlock:
+	@echo "Building Interlock Lambda binaries..."
+	@scripts/build_interlock.sh
+
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:
