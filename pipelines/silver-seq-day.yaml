@@ -1,0 +1,31 @@
+pipeline:
+  id: silver-seq-day
+  owner: data-platform
+  description: Silver SEQ daily aggregation
+
+schedule:
+  cron: "5 1 * * *"
+  timezone: UTC
+  evaluation:
+    window: 30m
+    interval: 5m
+
+sla:
+  deadline: "02:00"
+  expectedDuration: 30m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: daily-status
+      check: equals
+      field: all_hours_complete
+      value: true
+
+job:
+  type: glue
+  config:
+    jobName: "${environment}-seq-agg-day"
+    arguments:
+      "--s3_bucket": "${s3_bucket}"
+  maxRetries: 2
