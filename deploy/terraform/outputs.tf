@@ -42,3 +42,23 @@ output "glue_job_names" {
     seq_agg_day  = aws_glue_job.seq_agg_day.name
   }
 }
+
+output "interlock_control_table" {
+  description = "Name of the Interlock control DynamoDB table"
+  value       = module.interlock.control_table_name
+}
+
+output "interlock_event_bus" {
+  description = "Name of the Interlock EventBridge event bus"
+  value       = module.interlock.event_bus_name
+}
+
+output "interlock_sfn_arn" {
+  description = "ARN of the Interlock Step Functions state machine"
+  value       = module.interlock.sfn_arn
+}
+
+output "audit_function_url" {
+  description = "Function URL for the bronze audit Lambda"
+  value       = aws_lambda_function_url.bronze_audit.function_url
+}
