@@ -1,15 +1,9 @@
-# Go
-*.exe
-*.test
-*.out
-
 # Build artifacts
-deploy/dist/
-/seed
+build/
+*.zip
 
 # Terraform
 deploy/terraform/.terraform/
-deploy/terraform/.build/
 *.tfstate
 *.tfstate.*
 *.tfvars
@@ -21,13 +15,7 @@ tfplan
 __pycache__/
 *.pyc
 .venv/
-
-# E2E results
-e2e/results/
-
-# Go workspace (local dev only)
-go.work
-go.work.sum
+*.egg-info/
 
 # IDE
 .idea/
@@ -36,3 +24,6 @@ go.work.sum
 
 # Worktrees
 .worktrees/
+
+# OS
+.DS_Store

@@ -1,39 +1,19 @@
-output "table_name" {
-  description = "DynamoDB table name"
-  value       = aws_dynamodb_table.main.name
+output "telecom_data_bucket" {
+  description = "Name of the S3 bucket for generated telecom data"
+  value       = aws_s3_bucket.telecom_data.id
 }
 
-output "bucket_name" {
-  description = "S3 data bucket name"
-  value       = aws_s3_bucket.data.id
+output "telecom_data_bucket_arn" {
+  description = "ARN of the S3 bucket for generated telecom data"
+  value       = aws_s3_bucket.telecom_data.arn
 }
 
-output "topic_arn" {
-  description = "SNS alert topic ARN"
-  value       = aws_sns_topic.alerts.arn
+output "generator_function_name" {
+  description = "Name of the telecom generator Lambda function"
+  value       = aws_lambda_function.telecom_generator.function_name
 }
 
-output "state_machine_arn" {
-  description = "Step Function state machine ARN"
-  value       = aws_sfn_state_machine.pipeline.arn
-}
-
-output "evaluator_api_url" {
-  description = "API Gateway URL for the custom evaluator"
-  value       = "https://${aws_apigatewayv2_api.evaluator.id}.execute-api.${data.aws_region.current.name}.amazonaws.com"
-}
-
-output "chaos_enabled" {
-  description = "Whether chaos testing is enabled"
-  value       = var.chaos_enabled
-}
-
-output "dashboard_url" {
-  description = "CloudFront URL for the pipeline dashboard"
-  value       = "https://${aws_cloudfront_distribution.dashboard.domain_name}"
-}
-
-output "dashboard_bucket" {
-  description = "S3 bucket for dashboard static site"
-  value       = aws_s3_bucket.dashboard.id
+output "generator_function_arn" {
+  description = "ARN of the telecom generator Lambda function"
+  value       = aws_lambda_function.telecom_generator.arn
 }
