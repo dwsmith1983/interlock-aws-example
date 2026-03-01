@@ -1,189 +1,56 @@
+variable "environment" {
+  description = "Deployment environment name"
+  type        = string
+  default     = "dev"
+}
+
 variable "aws_region" {
-  description = "AWS region for deployment"
+  description = "AWS region for all resources"
   type        = string
-  default     = "ap-southeast-1"
+  default     = "us-east-1"
 }
 
-variable "table_name" {
-  description = "DynamoDB table name (also used as resource name prefix)"
-  type        = string
-  default     = "medallion-interlock"
+variable "tags" {
+  description = "Default tags applied to all resources"
+  type        = map(string)
+  default = {
+    Project   = "interlock-aws-example"
+    ManagedBy = "terraform"
+  }
 }
 
-variable "bucket_name" {
-  description = "S3 data bucket name. Defaults to {table_name}-data-{account_id} if empty."
-  type        = string
-  default     = ""
-}
-
-# Lambda settings
-variable "lambda_memory_size" {
-  description = "Memory (MB) for Go Lambda functions"
+variable "generator_memory_mb" {
+  description = "Memory allocation for the generator Lambda in MB"
   type        = number
-  default     = 128
+  default     = 3008
 }
 
-variable "lambda_timeout" {
-  description = "Timeout (seconds) for Go Lambda functions"
+variable "generator_timeout_s" {
+  description = "Timeout for the generator Lambda in seconds"
   type        = number
-  default     = 300
+  default     = 900
 }
 
-variable "log_retention_days" {
-  description = "CloudWatch log retention in days"
+variable "cdr_daily_target" {
+  description = "Daily target record count for the CDR stream"
+  type        = number
+  default     = 100000000
+}
+
+variable "seq_daily_target" {
+  description = "Daily target record count for the SEQ stream"
+  type        = number
+  default     = 500000000
+}
+
+variable "data_retention_days" {
+  description = "Number of days to retain generated data in S3"
   type        = number
   default     = 7
 }
 
-# Interlock settings
-variable "readiness_ttl" {
-  description = "TTL for readiness records"
-  type        = string
-  default     = "1h"
-}
-
-variable "retention_ttl" {
-  description = "TTL for retention records"
-  type        = string
-  default     = "168h"
-}
-
-variable "evaluator_base_url" {
-  description = "Base URL for the HTTP evaluator. Auto-wired to API Gateway if empty."
-  type        = string
-  default     = ""
-}
-
-# Paths (relative to this module)
-variable "lambda_dist_dir" {
-  description = "Directory containing built Go Lambda binaries"
-  type        = string
-  default     = "../dist/lambda"
-}
-
-variable "asl_path" {
-  description = "Path to Step Function ASL definition"
-  type        = string
-  default     = "../statemachine.asl.json"
-}
-
-variable "python_lambdas_dir" {
-  description = "Directory containing Python Lambda source"
-  type        = string
-  default     = "../../lambdas"
-}
-
-variable "glue_scripts_dir" {
-  description = "Directory containing Glue PySpark scripts"
-  type        = string
-  default     = "../../glue"
-}
-
-variable "archetypes_dir" {
-  description = "Directory containing archetype YAML files"
-  type        = string
-  default     = "../../archetypes"
-}
-
-# Glue settings
-variable "glue_worker_type" {
-  description = "Glue worker type (G.1X is minimum for batch ETL)"
-  type        = string
-  default     = "G.1X"
-}
-
-variable "glue_number_workers" {
-  description = "Number of Glue workers per job (minimum 2 for Spark)"
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
   type        = number
-  default     = 2
-}
-
-variable "glue_timeout_minutes" {
-  description = "Glue job timeout in minutes"
-  type        = number
-  default     = 30
-}
-
-variable "glue_max_concurrent_runs" {
-  description = "Max concurrent runs per Glue job"
-  type        = number
-  default     = 10
-}
-
-# Pipeline start date (YYYYMMDD) — first kick backfills from this date hour 00
-variable "pipeline_start_date" {
-  description = "Start date for pipeline schedules (YYYYMMDD). First ingestion backfills from this date."
-  type        = string
-  default     = "20260225"
-}
-
-# EventBridge ingestion rates
-variable "earthquake_rate_minutes" {
-  description = "USGS Earthquake ingestion interval (minutes)"
-  type        = number
-  default     = 20
-}
-
-variable "crypto_rate_minutes" {
-  description = "CoinLore Crypto ingestion interval (minutes)"
-  type        = number
-  default     = 20
-}
-
-# Chaos testing
-variable "circuit_breaker_threshold" {
-  description = "Consecutive evaluator failures before circuit breaker opens (empty to disable)"
-  type        = string
-  default     = "5"
-}
-
-variable "chaos_enabled" {
-  description = "Enable chaos testing Lambda and EventBridge rule"
-  type        = bool
-  default     = false
-}
-
-variable "chaos_rate_minutes" {
-  description = "Chaos controller invocation interval (minutes)"
-  type        = number
-  default     = 20
-}
-
-# Optional trigger permission flags
-variable "enable_glue_trigger" {
-  description = "Grant Glue StartJobRun/GetJobRun to trigger Lambda"
-  type        = bool
-  default     = true
-}
-
-variable "observability_compaction_schedule" {
-  description = "EventBridge schedule expression for observability compaction Glue job"
-  type        = string
-  default     = "rate(1 hour)"
-}
-
-variable "watchdog_interval" {
-  description = "EventBridge schedule expression for the watchdog Lambda"
-  type        = string
-  default     = "rate(5 minutes)"
-}
-
-variable "destroy_on_delete" {
-  description = "Allow Terraform to destroy stateful resources (DynamoDB, S3)"
-  type        = bool
-  default     = true
-}
-
-# Operational hardening
-variable "slack_webhook_url" {
-  description = "Slack incoming webhook URL for alert notifications (empty to disable)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "max_reruns_per_day" {
-  description = "Maximum drift-triggered reruns per pipeline per day"
-  type        = string
-  default     = "5"
+  default     = 7
 }
