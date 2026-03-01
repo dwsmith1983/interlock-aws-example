@@ -119,6 +119,29 @@ def update_hourly_sensor(
             "Bronze %s hour %s complete: %d records (%.1f%% of expected %d)",
             stream, par_hour, total_count, pct * 100, expected,
         )
+        # Propagate sensor to silver hourly pipeline so stream-router
+        # sees it on the silver PK and triggers SFN execution.
+        silver_key = {
+            "PK": {"S": f"PIPELINE#silver-{stream}-hour"},
+            "SK": {"S": "SENSOR#hourly-status"},
+        }
+        _dynamodb.put_item(
+            TableName=_CONTROL_TABLE,
+            Item={
+                **silver_key,
+                "data": {"M": {
+                    "date": {"S": par_day},
+                    "hour": {"S": par_hour},
+                    "count": {"N": str(total_count)},
+                    "expected_count": {"N": str(expected)},
+                    "files_processed": {"N": str(files_processed)},
+                    "complete": {"BOOL": True},
+                    "pct_of_expected": {"N": f"{pct:.4f}"},
+                    "updatedAt": {"S": now},
+                }},
+            },
+        )
+        logger.info("Propagated sensor to silver-%s-hour", stream)
     else:
         logger.info(
             "Bronze %s hour %s: %d/%d files, %d records so far",
