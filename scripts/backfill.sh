@@ -21,7 +21,8 @@ for hour in $(seq -w 0 23); do
     hour_had_windows=false
     for minute in 0 15 30 45; do
         window=$(printf "%sT%s:%02d:00+00:00" "$DATE" "$hour" "$minute")
-        window_epoch=$(date -u -jf "%Y-%m-%dT%H:%M:%S%z" "${window}" +%s 2>/dev/null \
+        window_no_tz=$(printf "%sT%s:%02d:00" "$DATE" "$hour" "$minute")
+        window_epoch=$(date -u -jf "%Y-%m-%dT%H:%M:%S" "${window_no_tz}" +%s 2>/dev/null \
             || date -u -d "${window}" +%s 2>/dev/null)
 
         if [ "$window_epoch" -gt "$NOW_EPOCH" ]; then
