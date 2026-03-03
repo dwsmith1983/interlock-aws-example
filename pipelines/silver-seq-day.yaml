@@ -6,6 +6,11 @@ pipeline:
 schedule:
   cron: "5 1 * * *"
   timezone: UTC
+  trigger:
+    key: daily-status
+    check: equals
+    field: all_hours_complete
+    value: true
   evaluation:
     window: 30m
     interval: 5m
