@@ -146,8 +146,78 @@ def update_hourly_sensor(
             },
         )
         logger.info("Propagated sensor to silver-%s-hour", stream)
+
+        # Update daily-status sensor for silver daily pipeline.
+        # Track completed hours in a StringSet; when all 24 arrive,
+        # set all_hours_complete=true which triggers the daily SFN.
+        _update_daily_sensor(stream, par_day, par_hour, now)
     else:
         logger.info(
             "Bronze %s hour %s: %d/%d files, %d records so far",
             stream, par_hour, files_processed, 4, total_count,
+        )
+
+
+def _update_daily_sensor(stream: str, par_day: str, par_hour: str, now: str) -> None:
+    """Update daily-status sensor on the silver daily pipeline PK.
+
+    Adds the completed hour to a StringSet. When all 24 hours are present,
+    sets all_hours_complete=true. This write triggers the stream-router
+    to start the daily SFN.
+    """
+    daily_key = {
+        "PK": {"S": f"PIPELINE#silver-{stream}-day"},
+        "SK": {"S": "SENSOR#daily-status"},
+    }
+
+    # Ensure data map exists
+    _dynamodb.update_item(
+        TableName=_CONTROL_TABLE,
+        Key=daily_key,
+        UpdateExpression="SET #data = if_not_exists(#data, :empty_map)",
+        ExpressionAttributeNames={"#data": "data"},
+        ExpressionAttributeValues={":empty_map": {"M": {}}},
+    )
+
+    # Add hour to completed set and update metadata
+    resp = _dynamodb.update_item(
+        TableName=_CONTROL_TABLE,
+        Key=daily_key,
+        UpdateExpression=(
+            "SET #data.#date = :date, #data.updatedAt = :now "
+            "ADD #data.completed_hours :hour_set"
+        ),
+        ExpressionAttributeNames={
+            "#data": "data",
+            "#date": "date",
+        },
+        ExpressionAttributeValues={
+            ":date": {"S": par_day},
+            ":now": {"S": now},
+            ":hour_set": {"SS": [par_hour]},
+        },
+        ReturnValues="ALL_NEW",
+    )
+
+    # Check if all 24 hours are complete
+    attrs = resp.get("Attributes", {})
+    data = attrs.get("data", {}).get("M", {})
+    completed = data.get("completed_hours", {}).get("SS", [])
+
+    if len(completed) >= 24:
+        _dynamodb.update_item(
+            TableName=_CONTROL_TABLE,
+            Key=daily_key,
+            UpdateExpression="SET #data.all_hours_complete = :complete",
+            ExpressionAttributeNames={"#data": "data"},
+            ExpressionAttributeValues={":complete": {"BOOL": True}},
+        )
+        logger.info(
+            "Silver %s day %s: all 24 hours complete, daily pipeline triggered",
+            stream, par_day,
+        )
+    else:
+        logger.info(
+            "Silver %s day %s: %d/24 hours complete",
+            stream, par_day, len(completed),
         )
