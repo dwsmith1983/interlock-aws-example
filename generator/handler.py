@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from generator.distribution import floor_to_window
 from generator.generate import generate_and_upload
@@ -10,7 +10,9 @@ def lambda_handler(event: dict, context) -> dict:
     daily_target: int = event["daily_target"]
 
     now = datetime.now(timezone.utc)
-    window_start = floor_to_window(now)
+    # Generate data for the previous 15-min window so bronze completes
+    # after the hour rolls over, giving silver a clean hour boundary.
+    window_start = floor_to_window(now - timedelta(minutes=15))
 
     bucket = os.environ.get("S3_BUCKET", "telecom-data-local")
 
