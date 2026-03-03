@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit upload-glue-scripts build-all tf-init tf-apply tf-destroy clean
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -6,6 +6,8 @@ GLUE_DIR := glue_jobs
 BUILD_DIR := build
 DEPLOY_DIR := deploy/terraform
 PPF_DIR := $(HOME)/code/pyspark-pipeline-framework
+ENVIRONMENT := dev
+AWS_REGION := ap-southeast-1
 
 build-generator:
 	@echo "Packaging telecom-generator Lambda..."
@@ -63,6 +65,18 @@ tf-apply:
 
 tf-destroy:
 	cd $(DEPLOY_DIR) && terraform destroy
+
+restart-schedules:
+	@echo "Cycling EventBridge schedules..."
+	@aws events disable-rule --name $(ENVIRONMENT)-telecom-cdr-schedule --region $(AWS_REGION)
+	@aws events disable-rule --name $(ENVIRONMENT)-telecom-seq-schedule --region $(AWS_REGION)
+	@sleep 2
+	@aws events enable-rule --name $(ENVIRONMENT)-telecom-cdr-schedule --region $(AWS_REGION)
+	@aws events enable-rule --name $(ENVIRONMENT)-telecom-seq-schedule --region $(AWS_REGION)
+	@echo "EventBridge schedules restarted"
+
+deploy: tf-apply restart-schedules
+	@echo "Deploy complete — schedules are active"
 
 clean:
 	rm -rf $(BUILD_DIR)
