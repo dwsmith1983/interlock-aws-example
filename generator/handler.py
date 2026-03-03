@@ -9,10 +9,13 @@ def lambda_handler(event: dict, context) -> dict:
     stream: str = event["stream"]
     daily_target: int = event["daily_target"]
 
-    now = datetime.now(timezone.utc)
-    # Generate data for the previous 15-min window so bronze completes
-    # after the hour rolls over, giving silver a clean hour boundary.
-    window_start = floor_to_window(now - timedelta(minutes=15))
+    if "window_start" in event:
+        window_start = datetime.fromisoformat(event["window_start"])
+    else:
+        now = datetime.now(timezone.utc)
+        # Generate data for the previous 15-min window so bronze completes
+        # after the hour rolls over, giving silver a clean hour boundary.
+        window_start = floor_to_window(now - timedelta(minutes=15))
 
     bucket = os.environ.get("S3_BUCKET", "telecom-data-local")
 
