@@ -47,7 +47,8 @@ def update_hourly_sensor(
     this map when evaluating trigger conditions.
 
     Uses DynamoDB UpdateItem with ADD to atomically increment count and files_processed.
-    Sets complete=true when files_processed reaches 4.
+    Sets complete=true when files_processed reaches 48 (4 batches x 12 files).
+    Each time period gets its own sensor record (keyed by date+hour).
     """
     if not _CONTROL_TABLE:
         logger.warning("INTERLOCK_CONTROL_TABLE not set, skipping sensor write")
@@ -59,9 +60,10 @@ def update_hourly_sensor(
     expected = _expected_hourly_count(daily_target, hour_int)
 
     now = datetime.now(timezone.utc).isoformat()
+    sensor_suffix = f"#{par_day}T{par_hour}"
     key = {
         "PK": {"S": f"PIPELINE#{pipeline_id}"},
-        "SK": {"S": "SENSOR#hourly-status"},
+        "SK": {"S": f"SENSOR#hourly-status{sensor_suffix}"},
     }
 
     # Ensure the data map exists (no-op if it already does)
@@ -105,7 +107,7 @@ def update_hourly_sensor(
     files_processed = int(data.get("files_processed", {}).get("N", "0"))
     total_count = int(data.get("count", {}).get("N", "0"))
 
-    if files_processed >= 4:
+    if files_processed >= 48:
         pct = total_count / expected if expected > 0 else 0.0
         _dynamodb.update_item(
             TableName=_CONTROL_TABLE,
@@ -127,7 +129,7 @@ def update_hourly_sensor(
         # sees it on the silver PK and triggers SFN execution.
         silver_key = {
             "PK": {"S": f"PIPELINE#silver-{stream}-hour"},
-            "SK": {"S": "SENSOR#hourly-status"},
+            "SK": {"S": f"SENSOR#hourly-status{sensor_suffix}"},
         }
         _dynamodb.put_item(
             TableName=_CONTROL_TABLE,
@@ -154,20 +156,21 @@ def update_hourly_sensor(
     else:
         logger.info(
             "Bronze %s hour %s: %d/%d files, %d records so far",
-            stream, par_hour, files_processed, 4, total_count,
+            stream, par_hour, files_processed, 48, total_count,
         )
 
 
 def _update_daily_sensor(stream: str, par_day: str, par_hour: str, now: str) -> None:
     """Update daily-status sensor on the silver daily pipeline PK.
 
-    Adds the completed hour to a StringSet. When all 24 hours are present,
-    sets all_hours_complete=true. This write triggers the stream-router
-    to start the daily SFN.
+    Each day gets its own sensor record (keyed by date). Adds the completed
+    hour to a StringSet. When all 24 hours are present, sets
+    all_hours_complete=true. This write triggers the stream-router to start
+    the daily SFN.
     """
     daily_key = {
         "PK": {"S": f"PIPELINE#silver-{stream}-day"},
-        "SK": {"S": "SENSOR#daily-status"},
+        "SK": {"S": f"SENSOR#daily-status#{par_day}"},
     }
 
     # Ensure data map exists

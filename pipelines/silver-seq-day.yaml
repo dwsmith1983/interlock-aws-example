@@ -4,8 +4,6 @@ pipeline:
   description: Silver SEQ daily aggregation
 
 schedule:
-  cron: "5 1 * * *"
-  timezone: UTC
   trigger:
     key: daily-status
     check: equals
