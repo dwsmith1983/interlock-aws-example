@@ -62,3 +62,18 @@ output "audit_function_url" {
   description = "Function URL for the bronze audit Lambda"
   value       = aws_lambda_function_url.bronze_audit.function_url
 }
+
+output "dashboard_url" {
+  description = "URL of the Interlock dashboard"
+  value       = "https://${aws_cloudfront_distribution.dashboard.domain_name}"
+}
+
+output "dashboard_bucket_name" {
+  description = "Name of the S3 bucket for dashboard static assets"
+  value       = aws_s3_bucket.dashboard.id
+}
+
+output "dashboard_api_url" {
+  description = "URL of the dashboard API Gateway endpoint"
+  value       = aws_apigatewayv2_api.dashboard.api_endpoint
+}
