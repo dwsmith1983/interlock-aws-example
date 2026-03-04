@@ -1,22 +1,20 @@
+"use client";
+
+import Link from "next/link";
+import { LineChart, Line, ResponsiveContainer } from "recharts";
 import StatusBadge from "./StatusBadge";
 import type { PipelineSummary } from "@/lib/types";
 
 const FAILURE_TYPES = new Set([
-  "SLA_BREACH",
-  "JOB_FAILED",
-  "INFRA_FAILURE",
-  "SFN_TIMEOUT",
-  "SCHEDULE_MISSED",
-  "VALIDATION_EXHAUSTED",
-  "RETRY_EXHAUSTED",
+  "SLA_BREACH", "JOB_FAILED", "INFRA_FAILURE", "SFN_TIMEOUT",
+  "SCHEDULE_MISSED", "VALIDATION_EXHAUSTED", "RETRY_EXHAUSTED",
 ]);
 
-function borderColor(eventType: string | undefined): string {
-  if (!eventType) return "border-gray-300";
-  if (FAILURE_TYPES.has(eventType)) return "border-red-500";
-  if (eventType === "SLA_WARNING") return "border-yellow-500";
-  if (eventType === "SLA_MET" || eventType === "JOB_COMPLETED") return "border-green-500";
-  return "border-gray-300";
+function statusColor(eventType: string | undefined): string {
+  if (!eventType) return "#94a3b8";
+  if (FAILURE_TYPES.has(eventType)) return "#f87171";
+  if (eventType === "SLA_WARNING") return "#fbbf24";
+  return "#34d399";
 }
 
 function timeAgo(timestamp: number): string {
@@ -36,25 +34,48 @@ interface Props {
 
 export default function PipelineCard({ name, summary }: Props) {
   const lastType = summary.lastEvent?.eventType;
+  const color = statusColor(lastType);
+  const sparkData = (summary.recentCounts ?? []).map((v, i) => ({ i, v }));
 
   return (
-    <div
-      className={`rounded-lg border-l-4 bg-white p-4 shadow-sm ${borderColor(lastType)}`}
-    >
-      <h3 className="text-sm font-semibold text-gray-900">{name}</h3>
-      <p className="mt-1 text-xs text-gray-500">
-        {summary.events} event{summary.events !== 1 ? "s" : ""} in last 24h
-      </p>
-      {summary.lastEvent ? (
-        <div className="mt-2 flex items-center gap-2">
-          <StatusBadge type={summary.lastEvent.eventType} />
-          <span className="text-xs text-gray-400">
-            {timeAgo(summary.lastEvent.timestamp)}
+    <Link href={`/pipelines?pipeline=${name}`}>
+      <div className="glass p-4 hover:bg-white/[0.08] transition-colors cursor-pointer">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+            <h3 className="text-sm font-semibold text-white">{name}</h3>
+          </div>
+          <span className="text-xs text-slate-500">
+            {summary.events} event{summary.events !== 1 ? "s" : ""}
           </span>
         </div>
-      ) : (
-        <p className="mt-2 text-xs text-gray-400">No recent events</p>
-      )}
-    </div>
+
+        {/* Sparkline */}
+        {sparkData.length > 0 && (
+          <div className="mt-3 h-10">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sparkData}>
+                <Line
+                  type="monotone"
+                  dataKey="v"
+                  stroke={color}
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {summary.lastEvent ? (
+          <div className="mt-3 flex items-center gap-2">
+            <StatusBadge type={summary.lastEvent.eventType} />
+            <span className="text-xs text-slate-500">{timeAgo(summary.lastEvent.timestamp)}</span>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-500">No recent events</p>
+        )}
+      </div>
+    </Link>
   );
 }

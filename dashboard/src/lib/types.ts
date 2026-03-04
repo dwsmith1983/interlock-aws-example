@@ -15,6 +15,7 @@ export interface PipelineSummary {
     message: string;
   } | null;
   types: Record<string, number>;
+  recentCounts?: number[];
 }
 
 export interface OverviewResponse {
