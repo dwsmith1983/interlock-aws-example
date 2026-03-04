@@ -9,6 +9,7 @@ module "interlock" {
   lambda_memory_size  = 256
   log_retention_days  = var.log_retention_days
   enable_glue_trigger = true
+  slack_webhook_url   = var.slack_webhook_url
 }
 
 # Orchestrator needs permission to invoke audit Lambda via function URL

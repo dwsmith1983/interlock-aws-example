@@ -92,3 +92,11 @@ variable "glue_daily_workers" {
   type        = number
   default     = 5
 }
+
+# Alerting
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for pipeline alerts (empty = logging only)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
