@@ -171,7 +171,7 @@ resource "aws_apigatewayv2_route" "dashboard" {
 resource "aws_lambda_function" "dashboard_api" {
   function_name    = "${var.environment}-interlock-dashboard-api"
   role             = aws_iam_role.dashboard_api.arn
-  handler          = "handler.lambda_handler"
+  handler          = "handler.handler"
   runtime          = "python3.12"
   architectures    = ["arm64"]
   memory_size      = 128
