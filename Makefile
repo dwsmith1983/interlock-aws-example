@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-dashboard deploy-dashboard upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -54,7 +54,27 @@ build-audit:
 	@zip -r $(BUILD_DIR)/bronze-audit.zip audit -x 'audit/__pycache__/*' '*.pyc'
 	@echo "Built $(BUILD_DIR)/bronze-audit.zip"
 
-build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit
+build-dashboard-api:
+	@echo "Packaging dashboard-api Lambda..."
+	@mkdir -p $(BUILD_DIR)/dashboard-api-pkg
+	@pip install -r lambdas/dashboard_api/requirements.txt -t $(BUILD_DIR)/dashboard-api-pkg --quiet
+	@cp lambdas/dashboard_api/handler.py $(BUILD_DIR)/dashboard-api-pkg/
+	@cd $(BUILD_DIR)/dashboard-api-pkg && zip -r ../dashboard-api.zip . -x '*/__pycache__/*' '*.pyc' '*/.dist-info/*'
+	@rm -rf $(BUILD_DIR)/dashboard-api-pkg
+	@echo "Built $(BUILD_DIR)/dashboard-api.zip"
+
+build-dashboard:
+	@echo "Building dashboard static site..."
+	@cd dashboard && npm run build
+	@echo "Dashboard built in dashboard/out/"
+
+deploy-dashboard:
+	@echo "Deploying dashboard to S3..."
+	@$(eval BUCKET := $(shell cd $(DEPLOY_DIR) && terraform output -raw dashboard_bucket_name))
+	aws s3 sync dashboard/out/ s3://$(BUCKET) --delete
+	@echo "Dashboard deployed to s3://$(BUCKET)"
+
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:
