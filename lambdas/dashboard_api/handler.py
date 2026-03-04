@@ -94,6 +94,14 @@ def _handle_overview(event):
             et = e.get("eventType", "UNKNOWN")
             types_breakdown[et] += 1
 
+        # Hourly event counts (index 0 = 00:00 UTC, index 23 = 23:00 UTC)
+        hourly = [0] * 24
+        for e in events:
+            ts = e.get("timestamp", 0)
+            if isinstance(ts, (int, float, Decimal)) and ts > 0:
+                hour = int((int(ts) / 1000) % 86400 // 3600)
+                hourly[hour] += 1
+
         last = events[-1]
         pipelines.append(
             {
@@ -105,6 +113,7 @@ def _handle_overview(event):
                     "message": last.get("message", ""),
                 },
                 "typesBreakdown": dict(types_breakdown),
+                "recentCounts": hourly,
             }
         )
 
