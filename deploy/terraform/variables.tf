@@ -94,9 +94,15 @@ variable "glue_daily_workers" {
 }
 
 # Alerting
-variable "slack_webhook_url" {
-  description = "Slack incoming webhook URL for pipeline alerts (empty = logging only)"
+variable "slack_bot_token" {
+  description = "Slack Bot API token for pipeline alerts (empty = logging only)"
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "slack_channel_id" {
+  description = "Slack channel ID for pipeline alerts"
+  type        = string
   default     = ""
 }
