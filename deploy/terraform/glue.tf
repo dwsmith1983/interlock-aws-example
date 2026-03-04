@@ -120,6 +120,10 @@ resource "aws_glue_job" "cdr_agg_hour" {
   worker_type       = var.glue_worker_type
   number_of_workers = var.glue_hourly_workers
 
+  execution_property {
+    max_concurrent_runs = 24
+  }
+
   command {
     script_location = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/cdr_agg_hour.py"
     python_version  = "3"
@@ -145,6 +149,10 @@ resource "aws_glue_job" "cdr_agg_day" {
   glue_version      = "4.0"
   worker_type       = var.glue_worker_type
   number_of_workers = var.glue_daily_workers
+
+  execution_property {
+    max_concurrent_runs = 24
+  }
 
   command {
     script_location = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/cdr_agg_day.py"
@@ -172,6 +180,10 @@ resource "aws_glue_job" "seq_agg_hour" {
   worker_type       = var.glue_worker_type
   number_of_workers = var.glue_hourly_workers
 
+  execution_property {
+    max_concurrent_runs = 24
+  }
+
   command {
     script_location = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/seq_agg_hour.py"
     python_version  = "3"
@@ -197,6 +209,10 @@ resource "aws_glue_job" "seq_agg_day" {
   glue_version      = "4.0"
   worker_type       = var.glue_worker_type
   number_of_workers = var.glue_daily_workers
+
+  execution_property {
+    max_concurrent_runs = 24
+  }
 
   command {
     script_location = "s3://${aws_s3_bucket.telecom_data.id}/glue_scripts/seq_agg_day.py"
