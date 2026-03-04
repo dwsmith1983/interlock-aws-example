@@ -13,7 +13,8 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
+  AreaChart,
+  Area,
 } from "recharts";
 
 // ---------------------------------------------------------------------------
@@ -49,51 +50,27 @@ function eventColor(type: string): string {
   ]);
   const yellow = new Set(["SLA_WARNING"]);
   const green = new Set(["SLA_MET", "JOB_COMPLETED", "VALIDATION_PASSED"]);
-  if (red.has(type)) return "#ef4444";
-  if (yellow.has(type)) return "#eab308";
-  if (green.has(type)) return "#22c55e";
-  return "#3b82f6";
+  if (red.has(type)) return "#f87171";
+  if (yellow.has(type)) return "#fbbf24";
+  if (green.has(type)) return "#34d399";
+  return "#38bdf8";
 }
 
-const SLA_COLORS = ["#22c55e", "#eab308", "#ef4444"];
+const SLA_COLORS = ["#34d399", "#fbbf24", "#f87171"];
 
 // ---------------------------------------------------------------------------
-// Pie label renderer
+// Dark-themed chart props
 // ---------------------------------------------------------------------------
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function renderPieLabel(props: any) {
-  const { cx, cy, midAngle, innerRadius, outerRadius, percent, value, name } =
-    props as {
-      cx: number;
-      cy: number;
-      midAngle: number;
-      innerRadius: number;
-      outerRadius: number;
-      percent: number;
-      value: number;
-      name: string;
-    };
-  const RADIAN = Math.PI / 180;
-  const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-  if (percent < 0.01) return null;
-  const label = String(name).replace("SLA_", "");
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="#374151"
-      textAnchor={x > cx ? "start" : "end"}
-      dominantBaseline="central"
-      className="text-xs"
-    >
-      {label}: {value} ({(percent * 100).toFixed(0)}%)
-    </text>
-  );
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
+const darkGrid = { stroke: "rgba(255,255,255,0.06)" };
+const darkAxisLine = { stroke: "rgba(255,255,255,0.1)" };
+const darkTick = { fill: "#94a3b8", fontSize: 11 };
+const darkTooltip = {
+  backgroundColor: "rgba(15,23,42,0.9)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 8,
+  color: "#f0fdf4",
+};
 
 // ---------------------------------------------------------------------------
 // Chart card wrapper
@@ -107,9 +84,33 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg bg-white p-4 shadow">
-      <h3 className="mb-3 text-sm font-semibold text-gray-700">{title}</h3>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
+      <h3 className="mb-4 text-sm font-semibold text-slate-300">{title}</h3>
       {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stat card wrapper
+// ---------------------------------------------------------------------------
+
+function StatCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
+      <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 text-2xl font-bold text-emerald-300">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
     </div>
   );
 }
@@ -135,9 +136,9 @@ export default function MetricsPage() {
   const slaData = useMemo(() => {
     if (!data?.sla) return [];
     return [
-      { name: "SLA_MET", value: data.sla.SLA_MET },
-      { name: "SLA_WARNING", value: data.sla.SLA_WARNING },
-      { name: "SLA_BREACH", value: data.sla.SLA_BREACH },
+      { name: "Met", value: data.sla.SLA_MET },
+      { name: "Warning", value: data.sla.SLA_WARNING },
+      { name: "Breach", value: data.sla.SLA_BREACH },
     ].filter((d) => d.value > 0);
   }, [data]);
 
@@ -159,15 +160,14 @@ export default function MetricsPage() {
 
   const totalEvents = data?.totalEvents ?? 0;
 
-  const slaMetRate = useMemo(() => {
-    if (!data?.sla) return 0;
-    const total = data.sla.SLA_MET + data.sla.SLA_WARNING + data.sla.SLA_BREACH;
-    if (total === 0) return 0;
-    return Math.round((data.sla.SLA_MET / total) * 100);
-  }, [data]);
+  const slaMet = data?.sla?.SLA_MET ?? 0;
+  const slaWarning = data?.sla?.SLA_WARNING ?? 0;
+  const slaBreach = data?.sla?.SLA_BREACH ?? 0;
+  const slaTotal = slaMet + slaWarning + slaBreach;
+  const slaMetRate = slaTotal === 0 ? 0 : Math.round((slaMet / slaTotal) * 100);
 
   const topEventType = useMemo(() => {
-    if (byTypeData.length === 0) return "—";
+    if (byTypeData.length === 0) return "\u2014";
     return byTypeData[0].type;
   }, [byTypeData]);
 
@@ -177,89 +177,78 @@ export default function MetricsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Metrics</h1>
-      <p className="mt-1 text-sm text-gray-600">
+      <h1 className="text-2xl font-bold text-white">Metrics</h1>
+      <p className="mt-1 text-sm text-slate-400">
         Event distribution and SLA compliance over time.
       </p>
 
-      {/* Date range selector */}
-      <div className="mt-6">
-        <label className="block text-xs font-medium text-gray-500 mb-1">
-          Date Range
-        </label>
-        <div className="flex gap-1">
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`px-3 py-1.5 text-sm font-medium rounded ${
-                range === r
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+      {/* Date range pills */}
+      <div className="mt-6 flex gap-2">
+        {RANGES.map((r) => (
+          <button
+            key={r}
+            onClick={() => setRange(r)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+              range === r
+                ? "border border-emerald-400/30 bg-emerald-500/20 text-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.15)]"
+                : "border border-white/10 bg-white/[0.03] text-slate-400 backdrop-blur-xl hover:bg-white/[0.06] hover:text-slate-300"
+            }`}
+          >
+            {r}
+          </button>
+        ))}
       </div>
 
       {/* Loading / Error */}
       {isLoading && (
-        <p className="mt-4 text-sm text-gray-500">Loading metrics data...</p>
+        <p className="mt-6 text-sm text-slate-500">Loading metrics data...</p>
       )}
       {error && (
-        <p className="mt-4 text-sm text-red-600">{error.message}</p>
+        <p className="mt-6 text-sm text-red-400">{error.message}</p>
       )}
 
       {!isLoading && !error && data && (
         <>
           {/* Summary stat cards */}
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-lg bg-white p-4 shadow">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Total Events
-              </p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">
-                {totalEvents.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-lg bg-white p-4 shadow">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                SLA Met Rate
-              </p>
-              <p className="mt-1 text-2xl font-bold text-gray-900">
-                {slaMetRate}%
-              </p>
-            </div>
-            <div className="rounded-lg bg-white p-4 shadow">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Top Event Type
-              </p>
-              <p className="mt-1 text-lg font-bold text-gray-900 truncate">
-                {topEventType}
-              </p>
-            </div>
+            <StatCard
+              label="Total Events"
+              value={totalEvents.toLocaleString()}
+            />
+            <StatCard
+              label="SLA Met Rate"
+              value={`${slaMetRate}%`}
+              sub={`${slaMet} of ${slaTotal} executions`}
+            />
+            <StatCard label="Top Event Type" value={topEventType} />
           </div>
 
-          {/* Charts grid */}
+          {/* Charts 2x2 grid */}
           <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-            {/* 1. Event counts by type */}
-            <ChartCard title="Event Counts by Type">
+            {/* 1. Events by Type — horizontal bar chart */}
+            <ChartCard title="Events by Type">
               {byTypeData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={byTypeData}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.max(250, byTypeData.length * 36)}
+                >
+                  <BarChart data={byTypeData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" {...darkGrid} />
                     <XAxis
-                      dataKey="type"
-                      tick={{ fontSize: 11 }}
-                      angle={-35}
-                      textAnchor="end"
-                      height={80}
+                      type="number"
+                      allowDecimals={false}
+                      tick={darkTick}
+                      axisLine={darkAxisLine}
                     />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="count">
+                    <YAxis
+                      type="category"
+                      dataKey="type"
+                      width={160}
+                      tick={darkTick}
+                      axisLine={darkAxisLine}
+                    />
+                    <Tooltip contentStyle={darkTooltip} />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
                       {byTypeData.map((entry, idx) => (
                         <Cell key={idx} fill={entry.fill} />
                       ))}
@@ -267,13 +256,13 @@ export default function MetricsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="py-12 text-center text-sm text-gray-400">
+                <p className="py-12 text-center text-sm text-slate-600">
                   No event data available.
                 </p>
               )}
             </ChartCard>
 
-            {/* 2. SLA compliance */}
+            {/* 2. SLA Compliance — donut chart */}
             <ChartCard title="SLA Compliance">
               {slaData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
@@ -284,14 +273,15 @@ export default function MetricsPage() {
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      outerRadius={90}
-                      label={renderPieLabel}
+                      innerRadius={60}
+                      outerRadius={80}
+                      strokeWidth={0}
                     >
                       {slaData.map((entry, idx) => {
                         const colorIdx =
-                          entry.name === "SLA_MET"
+                          entry.name === "Met"
                             ? 0
-                            : entry.name === "SLA_WARNING"
+                            : entry.name === "Warning"
                               ? 1
                               : 2;
                         return (
@@ -299,64 +289,125 @@ export default function MetricsPage() {
                         );
                       })}
                     </Pie>
-                    <Tooltip />
-                    <Legend />
+                    <Tooltip contentStyle={darkTooltip} />
+                    {/* Center label */}
+                    <text
+                      x="50%"
+                      y="46%"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      className="text-2xl font-bold"
+                      fill="#34d399"
+                    >
+                      {slaMetRate}%
+                    </text>
+                    <text
+                      x="50%"
+                      y="56%"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      className="text-xs"
+                      fill="#94a3b8"
+                    >
+                      SLA met
+                    </text>
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="py-12 text-center text-sm text-gray-400">
+                <p className="py-12 text-center text-sm text-slate-600">
                   No SLA data available.
                 </p>
               )}
             </ChartCard>
 
-            {/* 3. Events per hour */}
+            {/* 3. Events per Hour — area chart */}
             <ChartCard title="Events per Hour">
               {byHourData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={byHourData}>
-                    <CartesianGrid strokeDasharray="3 3" />
+                  <AreaChart data={byHourData}>
+                    <defs>
+                      <linearGradient
+                        id="emeraldGradient"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="#34d399"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#34d399"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" {...darkGrid} />
                     <XAxis
                       dataKey="hour"
-                      tick={{ fontSize: 10 }}
+                      tick={darkTick}
+                      axisLine={darkAxisLine}
                       angle={-35}
                       textAnchor="end"
-                      height={80}
+                      height={60}
                     />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#6366f1" />
-                  </BarChart>
+                    <YAxis
+                      allowDecimals={false}
+                      tick={darkTick}
+                      axisLine={darkAxisLine}
+                    />
+                    <Tooltip contentStyle={darkTooltip} />
+                    <Area
+                      type="monotone"
+                      dataKey="count"
+                      stroke="#34d399"
+                      fill="url(#emeraldGradient)"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="py-12 text-center text-sm text-gray-400">
+                <p className="py-12 text-center text-sm text-slate-600">
                   No hourly data available.
                 </p>
               )}
             </ChartCard>
 
-            {/* 4. Events by pipeline (horizontal) */}
+            {/* 4. Events by Pipeline — horizontal bar chart */}
             <ChartCard title="Events by Pipeline">
               {byPipelineData.length > 0 ? (
                 <ResponsiveContainer
                   width="100%"
-                  height={Math.max(200, byPipelineData.length * 40)}
+                  height={Math.max(250, byPipelineData.length * 40)}
                 >
                   <BarChart data={byPipelineData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" allowDecimals={false} />
+                    <CartesianGrid strokeDasharray="3 3" {...darkGrid} />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      tick={darkTick}
+                      axisLine={darkAxisLine}
+                    />
                     <YAxis
                       type="category"
                       dataKey="pipeline"
-                      width={140}
-                      tick={{ fontSize: 12 }}
+                      width={160}
+                      tick={darkTick}
+                      axisLine={darkAxisLine}
                     />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#6366f1" />
+                    <Tooltip contentStyle={darkTooltip} />
+                    <Bar
+                      dataKey="count"
+                      fill="#38bdf8"
+                      radius={[0, 4, 4, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="py-12 text-center text-sm text-gray-400">
+                <p className="py-12 text-center text-sm text-slate-600">
                   No pipeline data available.
                 </p>
               )}
