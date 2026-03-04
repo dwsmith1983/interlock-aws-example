@@ -7,7 +7,7 @@ BUILD_DIR="build/interlock"
 
 mkdir -p "$BUILD_DIR"
 
-for handler in stream-router orchestrator sla-monitor watchdog; do
+for handler in stream-router orchestrator sla-monitor watchdog event-sink alert-dispatcher; do
     echo "Building $handler..."
     GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
         -C "$INTERLOCK_DIR" \
