@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
   title: "Interlock Dashboard",
@@ -10,10 +10,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 min-h-screen">
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {children}
+      <body className="min-h-screen">
+        <Sidebar />
+        <main className="lg:pl-60 pt-14 lg:pt-0">
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            {children}
+          </div>
         </main>
       </body>
     </html>
