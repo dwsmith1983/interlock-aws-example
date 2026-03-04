@@ -47,7 +47,7 @@ def update_hourly_sensor(
     this map when evaluating trigger conditions.
 
     Uses DynamoDB UpdateItem with ADD to atomically increment count and files_processed.
-    Sets complete=true when files_processed reaches 48 (4 batches x 12 files).
+    Sets complete=true when pct_of_expected >= 0.7 (matching the validation rule).
     Each time period gets its own sensor record (keyed by date+hour).
     """
     if not _CONTROL_TABLE:
@@ -107,8 +107,8 @@ def update_hourly_sensor(
     files_processed = int(data.get("files_processed", {}).get("N", "0"))
     total_count = int(data.get("count", {}).get("N", "0"))
 
-    if files_processed >= 48:
-        pct = total_count / expected if expected > 0 else 0.0
+    pct = total_count / expected if expected > 0 else 0.0
+    if files_processed >= 4 and pct >= 0.7:
         _dynamodb.update_item(
             TableName=_CONTROL_TABLE,
             Key=key,
