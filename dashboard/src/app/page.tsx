@@ -4,42 +4,40 @@ import { useState, useMemo } from "react";
 import { useOverview, useEvents } from "@/lib/api";
 import PipelineCard from "@/components/PipelineCard";
 import StatusBadge from "@/components/StatusBadge";
+import { CDR_PIPELINES, SEQ_PIPELINES } from "@/lib/pipelines";
+import { FAILURE_TYPES, WARNING_TYPES, SUCCESS_TYPES, severityOf, SEVERITY_COLORS } from "@/lib/events";
 
-const CDR_PIPELINES = ["bronze-cdr", "silver-cdr-hour", "silver-cdr-day"];
-const SEQ_PIPELINES = ["bronze-seq", "silver-seq-hour", "silver-seq-day"];
+type SeverityFilter = "all" | "critical" | "warning" | "recovery";
 
-const CRITICAL_TYPES = new Set([
-  "SLA_BREACH", "JOB_FAILED", "INFRA_FAILURE", "SFN_TIMEOUT",
-  "SCHEDULE_MISSED", "VALIDATION_EXHAUSTED", "RETRY_EXHAUSTED",
-]);
-const WARNING_TYPES = new Set(["SLA_WARNING"]);
-const RECOVERY_TYPES = new Set(["SLA_MET", "JOB_COMPLETED", "VALIDATION_PASSED"]);
-
-type Severity = "all" | "critical" | "warning" | "recovery";
-
-function matchesSeverity(eventType: string, filter: Severity): boolean {
-  if (filter === "all") return CRITICAL_TYPES.has(eventType) || WARNING_TYPES.has(eventType) || RECOVERY_TYPES.has(eventType);
-  if (filter === "critical") return CRITICAL_TYPES.has(eventType);
+function matchesSeverity(eventType: string, filter: SeverityFilter): boolean {
+  if (filter === "all") return FAILURE_TYPES.has(eventType) || WARNING_TYPES.has(eventType) || SUCCESS_TYPES.has(eventType);
+  if (filter === "critical") return FAILURE_TYPES.has(eventType);
   if (filter === "warning") return WARNING_TYPES.has(eventType);
-  return RECOVERY_TYPES.has(eventType);
+  return SUCCESS_TYPES.has(eventType);
 }
 
 function formatTimestamp(ts: number): string {
   return new Date(ts).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
-function severityDot(eventType: string): string {
-  if (CRITICAL_TYPES.has(eventType)) return "bg-[#f87171]";
-  if (WARNING_TYPES.has(eventType)) return "bg-[#fbbf24]";
-  return "bg-[#34d399]";
-}
+const SEVERITY_DOT: Record<string, string> = {
+  critical: "bg-[#f87171]",
+  warning: "bg-[#fbbf24]",
+  success: "bg-[#34d399]",
+  info: "bg-[#38bdf8]",
+};
 
 export default function OverviewPage() {
   const { data, error, isLoading } = useOverview();
-  const [alertFilter, setAlertFilter] = useState<Severity>("all");
+  const [alertFilter, setAlertFilter] = useState<SeverityFilter>("all");
 
-  const now = Date.now();
-  const { data: eventsData } = useEvents(undefined, now - 86400000, now);
+  // Round to 30s bucket to align with SWR refresh and prevent cache thrashing
+  const bucket = useMemo(() => {
+    const now = Date.now();
+    const rounded = Math.floor(now / 30000) * 30000;
+    return { from: rounded - 86400000, to: rounded };
+  }, []);
+  const { data: eventsData } = useEvents(undefined, bucket.from, bucket.to);
 
   const filteredAlerts = useMemo(() => {
     if (!eventsData?.events) return [];
@@ -51,7 +49,7 @@ export default function OverviewPage() {
 
   const pipelines = data?.pipelines ?? {};
 
-  const FILTERS: { key: Severity; label: string }[] = [
+  const FILTERS: { key: SeverityFilter; label: string }[] = [
     { key: "all", label: "All" },
     { key: "critical", label: "Critical" },
     { key: "warning", label: "Warning" },
@@ -116,7 +114,7 @@ export default function OverviewPage() {
               ) : (
                 filteredAlerts.map((event, idx) => (
                   <div key={`${event.timestamp}-${idx}`} className="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${severityDot(event.eventType)}`} />
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${SEVERITY_DOT[severityOf(event.eventType)]}`} />
                     <span className="text-xs font-mono text-slate-500 shrink-0">{formatTimestamp(event.timestamp)}</span>
                     <span className="text-xs text-slate-400 shrink-0">{event.pipelineId}</span>
                     <StatusBadge type={event.eventType} />

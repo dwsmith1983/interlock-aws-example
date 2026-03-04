@@ -38,23 +38,7 @@ function rangeParams(range: DateRange): { from: number; to: number } {
 // Color helpers
 // ---------------------------------------------------------------------------
 
-function eventColor(type: string): string {
-  const red = new Set([
-    "SLA_BREACH",
-    "JOB_FAILED",
-    "INFRA_FAILURE",
-    "SFN_TIMEOUT",
-    "SCHEDULE_MISSED",
-    "VALIDATION_EXHAUSTED",
-    "RETRY_EXHAUSTED",
-  ]);
-  const yellow = new Set(["SLA_WARNING"]);
-  const green = new Set(["SLA_MET", "JOB_COMPLETED", "VALIDATION_PASSED"]);
-  if (red.has(type)) return "#f87171";
-  if (yellow.has(type)) return "#fbbf24";
-  if (green.has(type)) return "#34d399";
-  return "#38bdf8";
-}
+import { eventColor } from "@/lib/events";
 
 const SLA_COLORS = ["#34d399", "#fbbf24", "#f87171"];
 
@@ -84,7 +68,7 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
+    <div className="glass p-5">
       <h3 className="mb-4 text-sm font-semibold text-slate-300">{title}</h3>
       {children}
     </div>
@@ -105,7 +89,7 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl">
+    <div className="glass p-5">
       <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
         {label}
       </p>

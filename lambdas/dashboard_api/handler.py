@@ -29,6 +29,30 @@ SLA_TYPES = {"SLA_MET", "SLA_WARNING", "SLA_BREACH"}
 _PIPELINE_EVENTS_RE = re.compile(r"^/api/pipelines/([^/]+)/events$")
 
 
+def _scan_all(table, **kwargs):
+    """Paginate through all scan results."""
+    items = []
+    while True:
+        result = table.scan(**kwargs)
+        items.extend(result.get("Items", []))
+        if "LastEvaluatedKey" not in result:
+            break
+        kwargs["ExclusiveStartKey"] = result["LastEvaluatedKey"]
+    return items
+
+
+def _query_all(table, **kwargs):
+    """Paginate through all query results."""
+    items = []
+    while True:
+        result = table.query(**kwargs)
+        items.extend(result.get("Items", []))
+        if "LastEvaluatedKey" not in result:
+            break
+        kwargs["ExclusiveStartKey"] = result["LastEvaluatedKey"]
+    return items
+
+
 class DecimalEncoder(json.JSONEncoder):
     """JSON encoder that handles Decimal values from DynamoDB."""
 
@@ -74,10 +98,10 @@ def _handle_overview(event):
     """GET /api/overview — last 24h events grouped by pipeline."""
     cutoff = _now_ms() - ONE_DAY_MS
 
-    result = TABLE.scan(
+    items = _scan_all(
+        TABLE,
         FilterExpression=Attr("timestamp").gte(Decimal(str(cutoff))),
     )
-    items = result.get("Items", [])
 
     # Group by pipeline
     by_pipeline = defaultdict(list)
@@ -145,11 +169,11 @@ def _handle_pipeline_events(event, pipeline_id):
     start_ms = str(int(range_start.timestamp() * 1000))
     end_ms = str(int(range_end.timestamp() * 1000))
 
-    result = TABLE.query(
+    items = _query_all(
+        TABLE,
         KeyConditionExpression=Key("PK").eq(f"PIPELINE#{pipeline_id}")
         & Key("SK").between(start_ms, end_ms),
     )
-    items = result.get("Items", [])
 
     events = [
         {
@@ -186,20 +210,20 @@ def _handle_events(event):
 
     if event_type:
         # Query GSI1 (eventType + timestamp)
-        result = TABLE.query(
+        items = _query_all(
+            TABLE,
             IndexName="GSI1",
             KeyConditionExpression=Key("eventType").eq(event_type)
             & Key("timestamp").between(Decimal(str(from_val)), Decimal(str(to_val))),
         )
     else:
         # Scan with timestamp filter
-        result = TABLE.scan(
+        items = _scan_all(
+            TABLE,
             FilterExpression=Attr("timestamp").between(
                 Decimal(str(from_val)), Decimal(str(to_val))
             ),
         )
-
-    items = result.get("Items", [])
     events = [
         {
             "pipelineId": item.get("pipelineId", ""),
@@ -224,12 +248,12 @@ def _handle_metrics(event):
     from_val = int(from_ts) if from_ts else now - SEVEN_DAYS_MS
     to_val = int(to_ts) if to_ts else now
 
-    result = TABLE.scan(
+    items = _scan_all(
+        TABLE,
         FilterExpression=Attr("timestamp").between(
             Decimal(str(from_val)), Decimal(str(to_val))
         ),
     )
-    items = result.get("Items", [])
 
     by_type = defaultdict(int)
     by_pipeline = defaultdict(int)
