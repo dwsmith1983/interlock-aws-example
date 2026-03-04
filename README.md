@@ -1,23 +1,80 @@
 # interlock-aws-example
 
-Synthetic telecom data generator for demonstrating [Interlock](https://github.com/dwsmith1983/interlock) pipeline orchestration on AWS.
+Production-grade telecom ETL pipeline demonstrating [Interlock](https://github.com/dwsmith1983/interlock) pipeline orchestration on AWS. Generates synthetic CDR and SEQ data, processes it through a bronze/silver medallion architecture, and orchestrates the full pipeline with SLA monitoring.
+
+**Interlock framework:** [github.com/dwsmith1983/interlock](https://github.com/dwsmith1983/interlock) | [Documentation](https://dwsmith1983.github.io/interlock)
 
 ## Architecture
 
-A single Python Lambda (`telecom-generator`) is invoked by two EventBridge rules every 15 minutes, producing two data streams:
-
-- **CDR (Call Detail Records)** — probe-level pings from phone calls (~100M records/day)
-- **SEQ (Sequence/Probe)** — probe-level pings from internet browsing (~500M records/day)
-
 ```
-EventBridge (rate 15 min)
-    |-- CDR rule --> telecom-generator Lambda --> S3 cdr/...
-    |-- SEQ rule --> telecom-generator Lambda --> S3 seq/...
+EventBridge (rate 15m)
+  |- CDR rule --> telecom-generator Lambda --> S3 raw cdr/
+  |- SEQ rule --> telecom-generator Lambda --> S3 raw seq/
+                                                  |
+                                          EventBridge S3 PutObject
+                                                  |
+                                            Kinesis Stream
+                                                  |
+                                        bronze-consumer Lambda
+                                          |- Write Delta Lake (bronze/)
+                                          |- Update hourly-status sensor
+                                          |- Update daily-status sensor
+                                                  |
+                                    Interlock Control Table (DynamoDB)
+                                          |
+                        DynamoDB Streams --> stream-router Lambda
+                                          |
+                    +---------------------+---------------------+
+                    |                                           |
+          hourly-status sensor                       daily-status sensor
+          (complete = true)                     (all_hours_complete = true)
+                    |                                           |
+          Step Functions (per hour)                 Step Functions (per day)
+          |- orchestrator: Glue agg-hour            |- orchestrator: Glue agg-day
+          |- sla-monitor: deadline :30              |- sla-monitor: deadline 02:00
+          |- Write silver/{stream}_agg_hour/        |- Write silver/{stream}_agg_day/
 ```
 
-The generator simulates an external telecom provider's ingestion feed. It is **not** part of the Interlock-orchestrated ETL pipeline — it produces the raw data that the pipeline will process.
+Two data streams flow through three layers:
 
-## Data Schemas
+| Layer | Description | Trigger |
+|-------|-------------|---------|
+| **Raw** | Gzipped JSONL from generator Lambda | EventBridge rate(15 min) |
+| **Bronze** | Delta Lake with hashed phone numbers | Kinesis (S3 PutObject events) |
+| **Silver** | Spark aggregations (hourly + daily) | Interlock sensor-driven |
+
+### Interlock Orchestration
+
+Six pipelines are defined in `pipelines/` as declarative YAML:
+
+| Pipeline | Type | Trigger | Job |
+|----------|------|---------|-----|
+| `bronze-cdr` | Cron (:10) | Sensor `hourly-status` complete | Audit Lambda |
+| `bronze-seq` | Cron (:10) | Sensor `hourly-status` complete | Audit Lambda |
+| `silver-cdr-hour` | Event | Sensor `hourly-status` complete | Glue `cdr-agg-hour` |
+| `silver-seq-hour` | Event | Sensor `hourly-status` complete | Glue `seq-agg-hour` |
+| `silver-cdr-day` | Event | Sensor `daily-status` all hours | Glue `cdr-agg-day` |
+| `silver-seq-day` | Event | Sensor `daily-status` all hours | Glue `seq-agg-day` |
+
+Silver pipelines are fully event-driven — no cron schedules. The bronze consumer writes per-period sensor records to DynamoDB (one row per hour, one per day). When a sensor satisfies the trigger condition, the stream-router starts a Step Functions execution for that period.
+
+### Per-Hour Execution Model
+
+Each hour gets its own sensor record and SFN execution:
+
+- Sensor key: `SENSOR#hourly-status#2026-03-04T10`
+- Execution name encodes the hour: `silver-cdr-hour-2026-03-04T10-...`
+- Glue receives `--par_day` and `--par_hour` arguments
+- SLA deadline `:30` resolves to `T10:30:00Z` for hour 10
+
+Daily pipelines accumulate completed hours in a StringSet. When all 24 arrive, `all_hours_complete=true` fires the daily SFN.
+
+## Data Streams
+
+- **CDR (Call Detail Records)** — probe-level pings from phone calls (~100M records/day default)
+- **SEQ (Sequence/Probe)** — probe-level pings from internet browsing (~500M records/day default)
+
+### Schemas
 
 **CDR** — one row per ~10s probe ping during a phone call:
 ```json
@@ -29,9 +86,9 @@ The generator simulates an external telecom provider's ingestion feed. It is **n
 {"phone_number": "4695551234", "cell_tower": "a8c2e4f1", "host_name": "www.youtube.com", "site_name": "YouTube", "time": "2026-03-01T14:07:12Z"}
 ```
 
-## Session Model
+### Session Model
 
-Records are **not** independent random samples. They are generated from temporally correlated **sessions**:
+Records are generated from temporally correlated **sessions**, not independent random samples:
 
 - **CDR**: Each phone call is a session (exponential duration, mean ~2 min). A 2-minute call produces ~12 consecutive records with the same phone pair. 90% stationary (same tower), 10% mobile (tower handoffs via adjacency graph).
 - **SEQ**: Each browsing session is 10-60 minutes with 3-15 site visits. Within a site visit, host_name is constant. Streaming sites (YouTube, Netflix) produce more pings.
@@ -41,10 +98,14 @@ Traffic follows a bimodal time-of-day distribution (peaks at 10 AM and 8 PM, tro
 ## S3 Layout
 
 ```
-s3://{bucket}/{stream}/par_day=YYYYMMDD/par_hour=HH/{stream}_{YYYYMMDD}_{HHMM}_{part:04d}.jsonl.gz
+s3://{bucket}/
+  {stream}/par_day=YYYYMMDD/par_hour=HH/{stream}_{YYYYMMDD}_{HHMM}_{part}.jsonl.gz  (raw)
+  bronze/{stream}/par_day=YYYYMMDD/par_hour=HH/*.parquet                              (Delta)
+  silver/{stream}_agg_hour/par_day=YYYYMMDD/par_hour=HH/*.parquet                     (Delta)
+  silver/{stream}_agg_day/par_day=YYYYMMDD/*.parquet                                  (Delta)
 ```
 
-Each file contains up to 100K records (~1.5-3 MB gzipped).
+Each raw file contains up to 100K records (~1.5-3 MB gzipped). Bronze and silver layers use Delta Lake format.
 
 ## Reference Data
 
@@ -59,22 +120,45 @@ Each file contains up to 100K records (~1.5-3 MB gzipped).
 - AWS CLI configured
 - Terraform >= 1.5
 - Python 3.12
+- Go 1.24 (for building Interlock Lambdas)
+- Docker (for building the Delta Lake Lambda layer)
 
 ### Build and Deploy
 
 ```bash
-# Package the Lambda
-make build-generator
+# Build the Delta Lake layer (one-time, requires Docker)
+make build-delta-layer
 
-# Initialize and apply Terraform
+# Build all Lambda and Glue artifacts
+make build-all
+
+# Initialize and deploy infrastructure
 make tf-init
 make tf-apply
+
+# Restart EventBridge schedules (required after first deploy)
+make restart-schedules
 ```
+
+Or in one step after initial `tf-init`:
+
+```bash
+make deploy   # runs tf-apply + restart-schedules
+```
+
+### Backfill Historical Data
+
+```bash
+# Generate data from a specific date to now
+./scripts/backfill.sh 2026-03-01
+```
+
+The backfill script invokes the generator Lambda for every 15-minute window from the start date to the current time.
 
 ### Manual Invocation
 
 ```bash
-# Test CDR generation (small scale)
+# Test CDR generation for a specific window
 aws lambda invoke --function-name dev-telecom-generator \
   --payload '{"stream":"cdr","daily_target":1000000}' /dev/stdout
 
@@ -85,28 +169,74 @@ aws s3 ls s3://{bucket}/cdr/ --recursive
 ### Teardown
 
 ```bash
+# Empty S3 bucket first (required for destroy)
+aws s3 rm s3://{bucket} --recursive
+
 make tf-destroy
 ```
 
 ## Cost Estimate
 
-~$6/month (Lambda compute ~$2.40, S3 storage ~$2, CloudWatch logs ~$1.50, S3 requests ~$0.30).
+Costs depend heavily on data volume. Glue is the primary cost driver.
+
+| Resource | What Drives Cost | Est. Monthly |
+|----------|-----------------|-------------|
+| **Glue** (4 jobs) | 50 runs/day × 2-5 G.1X workers | $50-300 |
+| **Lambda** (7 functions) | Generator 3 GB × 60s, bronze 2 GB × 10s | $8-15 |
+| **S3** | 7-day lifecycle, ~15 GB/day at full scale | $3-5 |
+| **CloudWatch** | 7-day log retention, ~5 GB/month ingested | $2-3 |
+| **DynamoDB** (4 tables) | On-demand, low volume | $1-2 |
+| **Step Functions** | ~50 executions/day × 12 transitions | < $1 |
+| **Kinesis** | On-demand, ~2K events/day | < $1 |
+| **EventBridge** | ~3K events/day | < $1 |
+| **Total** | | **$65-330** |
+
+**Reducing costs:**
+- Lower `cdr_daily_target` / `seq_daily_target` in `variables.tf` — Glue jobs finish faster
+- Reduce `glue_hourly_workers` from 2 to 1
+- Stop EventBridge schedules when not testing (`make restart-schedules` to resume)
+- At minimum scale (~1M records/day), expect ~$30-50/month
 
 ## Project Structure
 
 ```
 generator/
-    handler.py          # Lambda entry point
-    sessions.py         # Session generation (CDR calls, SEQ browsing)
-    generate.py         # Sessions -> records -> S3
-    distribution.py     # Time-of-day traffic distribution
-    phones.py           # 500K phone number pool
-    towers.py           # Tower loading, adjacency, mobility
-    websites.py         # 500 weighted domains
+    handler.py              # Lambda entry point
+    sessions.py             # Session generation (CDR calls, SEQ browsing)
+    generate.py             # Sessions -> records -> S3
+    distribution.py         # Time-of-day traffic distribution
+    phones.py               # 500K phone number pool
+    towers.py               # Tower loading, adjacency, mobility
+    websites.py             # ~500 weighted domains
     reference/
-        towers.json     # Static tower data (2000 entries)
+        towers.json         # Static tower data (2000 entries)
+bronze_consumer/
+    handler.py              # Kinesis Lambda entry point
+    sensor.py               # Hourly/daily sensor updates to Interlock control table
+    delta_writer.py         # Write records to Delta Lake
+    hasher.py               # SHA-256 phone number hashing
+    s3_reader.py            # Read gzipped JSONL from S3
+audit/
+    handler.py              # Hourly reconciliation (Delta count vs sensor count)
+glue_jobs/
+    args.py                 # Argument resolution (--par_day, --par_hour, --s3_bucket)
+    components.py           # ReadBronzeDelta, CdrAggTransform, SeqAggTransform, WriteSilverDelta
+    cdr_agg_hour.py         # Hourly CDR aggregation
+    cdr_agg_day.py          # Daily CDR aggregation
+    seq_agg_hour.py         # Hourly SEQ aggregation
+    seq_agg_day.py          # Daily SEQ aggregation
+pipelines/
+    bronze-cdr.yaml         # Bronze CDR audit pipeline
+    bronze-seq.yaml         # Bronze SEQ audit pipeline
+    silver-cdr-hour.yaml    # Silver CDR hourly aggregation
+    silver-seq-hour.yaml    # Silver SEQ hourly aggregation
+    silver-cdr-day.yaml     # Silver CDR daily aggregation
+    silver-seq-day.yaml     # Silver SEQ daily aggregation
 scripts/
-    gen_towers.py       # One-time tower reference generator
+    backfill.sh             # Historical data generation
+    build_interlock.sh      # Build Go Lambda binaries from interlock repo
+    build_delta_layer.sh    # Build pyarrow/deltalake Lambda layer via Docker
+    gen_towers.py           # One-time tower reference data generator
 deploy/
-    terraform/          # All infrastructure
+    terraform/              # All infrastructure (108 resources)
 ```
