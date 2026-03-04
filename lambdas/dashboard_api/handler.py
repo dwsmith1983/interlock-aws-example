@@ -85,7 +85,7 @@ def _handle_overview(event):
         pid = item.get("pipelineId", "unknown")
         by_pipeline[pid].append(item)
 
-    pipelines = []
+    pipelines = {}
     for pid, events in sorted(by_pipeline.items()):
         # Sort events by timestamp
         events.sort(key=lambda e: int(e.get("timestamp", 0)))
@@ -103,19 +103,16 @@ def _handle_overview(event):
                 hourly[hour] += 1
 
         last = events[-1]
-        pipelines.append(
-            {
-                "pipelineId": pid,
-                "eventCount": len(events),
-                "lastEvent": {
-                    "eventType": last.get("eventType"),
-                    "timestamp": last.get("timestamp"),
-                    "message": last.get("message", ""),
-                },
-                "typesBreakdown": dict(types_breakdown),
-                "recentCounts": hourly,
-            }
-        )
+        pipelines[pid] = {
+            "events": len(events),
+            "lastEvent": {
+                "eventType": last.get("eventType"),
+                "timestamp": last.get("timestamp"),
+                "message": last.get("message", ""),
+            },
+            "types": dict(types_breakdown),
+            "recentCounts": hourly,
+        }
 
     return _response(200, {"pipelines": pipelines})
 
@@ -154,12 +151,24 @@ def _handle_pipeline_events(event, pipeline_id):
     )
     items = result.get("Items", [])
 
+    events = [
+        {
+            "pipelineId": item.get("pipelineId", ""),
+            "eventType": item.get("eventType", ""),
+            "timestamp": item.get("timestamp", 0),
+            "message": item.get("message", ""),
+            "date": item.get("date", ""),
+            "scheduleId": item.get("scheduleId", ""),
+        }
+        for item in items
+    ]
+
     return _response(
         200,
         {
             "pipelineId": pipeline_id,
             "date": date_str,
-            "events": items,
+            "events": events,
         },
     )
 
@@ -191,7 +200,18 @@ def _handle_events(event):
         )
 
     items = result.get("Items", [])
-    return _response(200, {"events": items})
+    events = [
+        {
+            "pipelineId": item.get("pipelineId", ""),
+            "eventType": item.get("eventType", ""),
+            "timestamp": item.get("timestamp", 0),
+            "message": item.get("message", ""),
+            "date": item.get("date", ""),
+            "scheduleId": item.get("scheduleId", ""),
+        }
+        for item in items
+    ]
+    return _response(200, {"events": events})
 
 
 def _handle_metrics(event):
