@@ -4,18 +4,7 @@ import Link from "next/link";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import StatusBadge from "./StatusBadge";
 import type { PipelineSummary } from "@/lib/types";
-
-const FAILURE_TYPES = new Set([
-  "SLA_BREACH", "JOB_FAILED", "INFRA_FAILURE", "SFN_TIMEOUT",
-  "SCHEDULE_MISSED", "VALIDATION_EXHAUSTED", "RETRY_EXHAUSTED",
-]);
-
-function statusColor(eventType: string | undefined): string {
-  if (!eventType) return "#94a3b8";
-  if (FAILURE_TYPES.has(eventType)) return "#f87171";
-  if (eventType === "SLA_WARNING") return "#fbbf24";
-  return "#34d399";
-}
+import { eventColor } from "@/lib/events";
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -34,7 +23,7 @@ interface Props {
 
 export default function PipelineCard({ name, summary }: Props) {
   const lastType = summary.lastEvent?.eventType;
-  const color = statusColor(lastType);
+  const color = lastType ? eventColor(lastType) : "#94a3b8";
   const sparkData = (summary.recentCounts ?? []).map((v, i) => ({ i, v }));
 
   return (

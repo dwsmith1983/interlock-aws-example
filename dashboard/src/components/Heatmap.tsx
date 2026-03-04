@@ -1,9 +1,5 @@
 import type { PipelineEvent } from "@/lib/types";
-
-const RED_TYPES = new Set([
-  "SLA_BREACH", "JOB_FAILED", "INFRA_FAILURE", "SFN_TIMEOUT",
-  "SCHEDULE_MISSED", "VALIDATION_EXHAUSTED", "RETRY_EXHAUSTED",
-]);
+import { FAILURE_TYPES } from "@/lib/events";
 
 interface HeatmapProps {
   events: PipelineEvent[];
@@ -15,7 +11,7 @@ interface HeatmapProps {
 
 function cellColor(events: PipelineEvent[]): string {
   if (events.length === 0) return "rgba(255,255,255,0.03)";
-  const hasCritical = events.some((e) => RED_TYPES.has(e.eventType));
+  const hasCritical = events.some((e) => FAILURE_TYPES.has(e.eventType));
   const count = events.length;
   if (hasCritical) {
     const opacity = Math.min(0.15 + count * 0.1, 0.6);
@@ -64,6 +60,7 @@ export default function Heatmap({ events, pipelines, selectedHour, selectedPipel
                   <button
                     key={hour}
                     onClick={() => onSelectCell(pipeline, hour)}
+                    aria-label={`${pipeline} hour ${hour}: ${cellEvents.length} events`}
                     className={`flex-1 h-7 rounded-sm transition-all ${
                       isSelected ? "ring-2 ring-white/50" : ""
                     }`}

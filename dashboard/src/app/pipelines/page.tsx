@@ -5,10 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEvents } from "@/lib/api";
 import Heatmap from "@/components/Heatmap";
 import EventTimeline from "@/components/EventTimeline";
-
-const ALL_PIPELINES = ["bronze-cdr", "silver-cdr-hour", "silver-cdr-day", "bronze-seq", "silver-seq-hour", "silver-seq-day"];
-const CDR_PIPELINES = ["bronze-cdr", "silver-cdr-hour", "silver-cdr-day"];
-const SEQ_PIPELINES = ["bronze-seq", "silver-seq-hour", "silver-seq-day"];
+import { ALL_PIPELINES, CDR_PIPELINES, SEQ_PIPELINES } from "@/lib/pipelines";
 
 type Group = "all" | "cdr" | "seq";
 
@@ -85,6 +82,7 @@ function PipelinesInner() {
         <select
           value={selectedPipeline}
           onChange={(e) => { setSelectedPipeline(e.target.value); setSelectedHour(""); }}
+          aria-label="Filter by pipeline"
           className="glass-subtle px-3 py-1.5 text-xs text-slate-300 bg-transparent outline-none cursor-pointer"
         >
           <option value="" className="bg-[#0a1628]">All pipelines</option>
@@ -97,6 +95,7 @@ function PipelinesInner() {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
+          aria-label="Select date"
           className="glass-subtle px-3 py-1.5 text-xs text-slate-300 bg-transparent outline-none cursor-pointer"
         />
       </div>

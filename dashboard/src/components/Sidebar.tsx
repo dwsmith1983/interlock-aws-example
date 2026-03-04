@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useOverview } from "@/lib/api";
+import { CDR_PIPELINES, SEQ_PIPELINES } from "@/lib/pipelines";
+import { severityOf, SEVERITY_COLORS } from "@/lib/events";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" },
@@ -11,19 +13,16 @@ const NAV_ITEMS = [
   { href: "/metrics", label: "Metrics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
 ];
 
-const CDR_PIPELINES = ["bronze-cdr", "silver-cdr-hour", "silver-cdr-day"];
-const SEQ_PIPELINES = ["bronze-seq", "silver-seq-hour", "silver-seq-day"];
-
-const FAILURE_TYPES = new Set([
-  "SLA_BREACH", "JOB_FAILED", "INFRA_FAILURE", "SFN_TIMEOUT",
-  "SCHEDULE_MISSED", "VALIDATION_EXHAUSTED", "RETRY_EXHAUSTED",
-]);
+const SEVERITY_BG: Record<string, string> = {
+  critical: "bg-[#f87171]",
+  warning: "bg-[#fbbf24]",
+  success: "bg-[#34d399]",
+  info: "bg-[#38bdf8]",
+};
 
 function statusDot(eventType: string | undefined): string {
   if (!eventType) return "bg-slate-500";
-  if (FAILURE_TYPES.has(eventType)) return "bg-[#f87171]";
-  if (eventType === "SLA_WARNING") return "bg-[#fbbf24]";
-  return "bg-[#34d399]";
+  return SEVERITY_BG[severityOf(eventType)] ?? "bg-slate-500";
 }
 
 export default function Sidebar() {
@@ -125,7 +124,12 @@ export default function Sidebar() {
           </svg>
           <span className="font-bold text-white">Interlock</span>
         </Link>
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 text-slate-400 hover:text-white">
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label="Toggle navigation menu"
+          aria-expanded={mobileOpen}
+          className="p-2 text-slate-400 hover:text-white"
+        >
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             {mobileOpen ? (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
