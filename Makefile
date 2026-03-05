@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-dashboard deploy-dashboard upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dashboard deploy-dashboard upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -63,6 +63,15 @@ build-dashboard-api:
 	@rm -rf $(BUILD_DIR)/dashboard-api-pkg
 	@echo "Built $(BUILD_DIR)/dashboard-api.zip"
 
+build-daily-sensor:
+	@echo "Packaging daily-sensor Lambda..."
+	@mkdir -p $(BUILD_DIR)/daily-sensor-pkg
+	@pip install -r lambdas/daily_sensor/requirements.txt -t $(BUILD_DIR)/daily-sensor-pkg --quiet
+	@cp lambdas/daily_sensor/handler.py $(BUILD_DIR)/daily-sensor-pkg/
+	@cd $(BUILD_DIR)/daily-sensor-pkg && zip -r ../daily-sensor.zip . -x '*/__pycache__/*' '*.pyc' '*/.dist-info/*'
+	@rm -rf $(BUILD_DIR)/daily-sensor-pkg
+	@echo "Built $(BUILD_DIR)/daily-sensor.zip"
+
 build-dashboard:
 	@echo "Building dashboard static site..."
 	@cd dashboard && npm run build
@@ -74,7 +83,7 @@ deploy-dashboard:
 	aws s3 sync dashboard/out/ s3://$(BUCKET) --delete
 	@echo "Dashboard deployed to s3://$(BUCKET)"
 
-build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:
