@@ -5,6 +5,7 @@ interface Props {
   id: string;
   hours: Record<string, PipelineEvent[]>;
   nowHour: number;
+  selectedHour?: number | null;
   onCellClick?: (pipeline: string, hour: number) => void;
 }
 
@@ -13,7 +14,7 @@ function countOpacity(count: number): number {
   return Math.min(0.4 + count * 0.12, 1);
 }
 
-export default function TimelineSwimlane({ id, hours, nowHour, onCellClick }: Props) {
+export default function TimelineSwimlane({ id, hours, nowHour, selectedHour, onCellClick }: Props) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs text-text-muted w-28 shrink-0 truncate text-right">
@@ -27,6 +28,7 @@ export default function TimelineSwimlane({ id, hours, nowHour, onCellClick }: Pr
           const color = events.length > 0 ? SEVERITY_COLORS[sev] : "transparent";
           const opacity = countOpacity(events.length);
           const isNow = h === nowHour;
+          const isSelected = selectedHour === h;
 
           return (
             <button
@@ -34,7 +36,11 @@ export default function TimelineSwimlane({ id, hours, nowHour, onCellClick }: Pr
               onClick={() => onCellClick?.(id, h)}
               title={`${id} h${String(h).padStart(2, "0")} — ${events.length} events`}
               className={`h-7 rounded-sm transition-all hover:ring-1 hover:ring-accent/40 ${
-                isNow ? "ring-1 ring-accent" : ""
+                isSelected
+                  ? "ring-2 ring-accent scale-110 z-10 relative"
+                  : isNow
+                    ? "ring-1 ring-accent"
+                    : ""
               }`}
               style={{
                 backgroundColor: events.length > 0 ? color : "#f1f5f9",
