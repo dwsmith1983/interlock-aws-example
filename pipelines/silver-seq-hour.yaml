@@ -23,7 +23,7 @@ validation:
     - key: hourly-status
       check: gte
       field: pct_of_expected
-      value: 0.7
+      value: 0.85
 
 job:
   type: glue

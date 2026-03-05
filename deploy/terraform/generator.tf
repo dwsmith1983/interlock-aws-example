@@ -79,12 +79,12 @@ resource "aws_cloudwatch_log_group" "telecom_generator" {
 
 resource "aws_cloudwatch_event_rule" "cdr" {
   name                = "${var.environment}-telecom-cdr-schedule"
-  schedule_expression = "rate(15 minutes)"
+  schedule_expression = "cron(0/15 * * * ? *)"
 }
 
 resource "aws_cloudwatch_event_rule" "seq" {
   name                = "${var.environment}-telecom-seq-schedule"
-  schedule_expression = "rate(15 minutes)"
+  schedule_expression = "cron(0/15 * * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "cdr" {
