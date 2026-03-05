@@ -108,7 +108,7 @@ def update_hourly_sensor(
     total_count = int(data.get("count", {}).get("N", "0"))
 
     pct = total_count / expected if expected > 0 else 0.0
-    if files_processed >= 4 and pct >= 0.7:
+    if files_processed >= 4 and pct >= 0.85:
         _dynamodb.update_item(
             TableName=_CONTROL_TABLE,
             Key=key,
