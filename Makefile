@@ -75,12 +75,12 @@ build-daily-sensor:
 build-dashboard:
 	@echo "Building dashboard static site..."
 	@cd dashboard && npm run build
-	@echo "Dashboard built in dashboard/out/"
+	@echo "Dashboard built in dashboard/dist/"
 
 deploy-dashboard:
 	@echo "Deploying dashboard to S3..."
 	@$(eval BUCKET := $(shell cd $(DEPLOY_DIR) && terraform output -raw dashboard_bucket_name))
-	aws s3 sync dashboard/out/ s3://$(BUCKET) --delete
+	aws s3 sync dashboard/dist/ s3://$(BUCKET) --delete
 	@echo "Dashboard deployed to s3://$(BUCKET)"
 
 build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor
