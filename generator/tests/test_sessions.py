@@ -79,3 +79,24 @@ def test_seq_pct_of_expected_above_threshold():
         f"{len(failing)}/24 hours below 0.85: "
         + ", ".join(f"h{h}={v:.4f}" for h, v in sorted(failing.items()))
     )
+
+
+def test_partition_by_timestamp_hour(monkeypatch):
+    """Records with different timestamp hours go to different S3 keys."""
+    from generator.generate import generate_and_upload
+
+    uploaded = {}
+
+    def mock_upload(bucket, key, data):
+        uploaded[key] = data
+
+    monkeypatch.setattr("generator.generate.upload_to_s3", mock_upload)
+
+    ws = datetime(2026, 3, 4, 10, 45, tzinfo=timezone.utc)
+    result = generate_and_upload("seq", ws, 10_000_000, "test-bucket")
+
+    for key in uploaded:
+        par_hour = key.split("par_hour=")[1].split("/")[0]
+        assert len(par_hour) == 2
+        assert 0 <= int(par_hour) <= 23
+    assert result["total_records"] > 0

@@ -24,27 +24,36 @@ def generate_and_upload(
 ) -> dict:
     records = generate_window(stream, window_start, daily_target)
 
-    date_str = window_start.strftime("%Y%m%d")
-    hour_str = window_start.strftime("%H")
-    time_str = window_start.strftime("%H%M")
+    # Group records by actual timestamp hour for correct partitioning.
+    # With expanded spillover, records may span adjacent hours.
+    by_partition: dict[tuple[str, str], list[dict]] = {}
+    for rec in records:
+        t = rec["time"]  # "YYYY-MM-DDTHH:MM:SSZ"
+        rec_date = t[:4] + t[5:7] + t[8:10]  # YYYYMMDD
+        rec_hour = t[11:13]                    # HH
+        by_partition.setdefault((rec_date, rec_hour), []).append(rec)
 
+    time_str = window_start.strftime("%H%M")
     files_uploaded = 0
-    for i in range(0, max(1, len(records)), CHUNK_SIZE):
-        chunk = records[i : i + CHUNK_SIZE]
-        if not chunk:
-            break
-        part = (i // CHUNK_SIZE) + 1
-        key = (
-            f"{stream}/par_day={date_str}/par_hour={hour_str}/"
-            f"{stream}_{date_str}_{time_str}_{part:04d}.jsonl.gz"
-        )
-        upload_to_s3(bucket, key, gzip_jsonl(chunk))
-        files_uploaded += 1
+    total_records = len(records)
+
+    for (date_str, hour_str), hour_records in sorted(by_partition.items()):
+        for i in range(0, max(1, len(hour_records)), CHUNK_SIZE):
+            chunk = hour_records[i : i + CHUNK_SIZE]
+            if not chunk:
+                break
+            part = (i // CHUNK_SIZE) + 1
+            key = (
+                f"{stream}/par_day={date_str}/par_hour={hour_str}/"
+                f"{stream}_{date_str}_{time_str}_{part:04d}.jsonl.gz"
+            )
+            upload_to_s3(bucket, key, gzip_jsonl(chunk))
+            files_uploaded += 1
 
     return {
         "stream": stream,
         "window": window_start.isoformat(),
-        "total_records": len(records),
+        "total_records": total_records,
         "files": files_uploaded,
         "bucket": bucket,
     }
