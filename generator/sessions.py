@@ -178,46 +178,57 @@ def generate_window(
 
     target_records = compute_window_records(daily_target, window_start)
     window_end = window_start + timedelta(minutes=WINDOW_MINUTES)
-    prev_window_start = window_start - timedelta(minutes=WINDOW_MINUTES)
 
     # Current window sessions
     current_seed = make_seed(stream, window_start)
     current_rng = random.Random(current_seed)
 
-    # Previous window sessions (for spillover)
-    prev_seed = make_seed(stream, prev_window_start)
-    prev_rng = random.Random(prev_seed)
+    # Max lookback: CDR sessions <= 15 min (1 window), SEQ <= 60 min (4 windows)
+    if stream == "cdr":
+        max_lookback = 1
+        avg_pings = CDR_AVG_PINGS_PER_CALL
+    elif stream == "seq":
+        max_lookback = 4
+        avg_pings = SEQ_AVG_PINGS_PER_SESSION
+    else:
+        raise ValueError(f"Unknown stream: {stream}")
 
     if stream == "cdr":
-        num_calls = max(1, target_records // CDR_AVG_PINGS_PER_CALL)
-        prev_calls = max(1, compute_window_records(daily_target, prev_window_start) // CDR_AVG_PINGS_PER_CALL)
-
+        num_units = max(1, target_records // avg_pings)
         current_records = _generate_cdr_sessions(
             current_rng, window_start, window_end,
             filter_lo=window_start, filter_hi=window_end,
-            num_calls=num_calls,
+            num_calls=num_units,
         )
-        spillover_records = _generate_cdr_sessions(
-            prev_rng, prev_window_start, window_start,
-            filter_lo=window_start, filter_hi=window_end,
-            num_calls=prev_calls,
-        )
-    elif stream == "seq":
-        num_sessions = max(1, target_records // SEQ_AVG_PINGS_PER_SESSION)
-        prev_sessions = max(1, compute_window_records(daily_target, prev_window_start) // SEQ_AVG_PINGS_PER_SESSION)
-
+    else:
+        num_units = max(1, target_records // avg_pings)
         current_records = _generate_seq_sessions(
             current_rng, window_start, window_end,
             filter_lo=window_start, filter_hi=window_end,
-            num_sessions=num_sessions,
+            num_sessions=num_units,
         )
-        spillover_records = _generate_seq_sessions(
-            prev_rng, prev_window_start, window_start,
-            filter_lo=window_start, filter_hi=window_end,
-            num_sessions=prev_sessions,
-        )
-    else:
-        raise ValueError(f"Unknown stream: {stream}")
+
+    # Collect spillover from previous windows
+    spillover_records: list[dict] = []
+    for lookback in range(1, max_lookback + 1):
+        prev_ws = window_start - timedelta(minutes=WINDOW_MINUTES * lookback)
+        prev_rng = random.Random(make_seed(stream, prev_ws))
+        prev_target = compute_window_records(daily_target, prev_ws)
+        prev_count = max(1, prev_target // avg_pings)
+
+        if stream == "cdr":
+            spill = _generate_cdr_sessions(
+                prev_rng, prev_ws, prev_ws + timedelta(minutes=WINDOW_MINUTES),
+                filter_lo=window_start, filter_hi=window_end,
+                num_calls=prev_count,
+            )
+        else:
+            spill = _generate_seq_sessions(
+                prev_rng, prev_ws, prev_ws + timedelta(minutes=WINDOW_MINUTES),
+                filter_lo=window_start, filter_hi=window_end,
+                num_sessions=prev_count,
+            )
+        spillover_records.extend(spill)
 
     all_records = current_records + spillover_records
     all_records.sort(key=lambda r: r["time"])
