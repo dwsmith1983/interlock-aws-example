@@ -16,44 +16,54 @@ _S3_BUCKET = os.environ.get("S3_BUCKET", "")
 
 
 def lambda_handler(event, context):
-    """Audit bronze data for the previous hour.
+    """Audit bronze data for a given hour.
 
-    Reads the bronze Delta table partition, counts records,
-    compares to sensor count, writes audit-result sensor.
+    Reads par_day/par_hour from the request body (injected by the framework)
+    or falls back to clock-based calculation for backward compatibility.
     """
-    now = datetime.now(timezone.utc)
-    # Audit runs at :10 past the hour for the PREVIOUS hour
-    target = now - timedelta(hours=1)
-    par_day = target.strftime("%Y%m%d")
-    par_hour = f"{target.hour:02d}"
+    # Parse execution context from request body if available.
+    body = {}
+    if isinstance(event, dict) and event.get("body"):
+        try:
+            raw = event["body"]
+            body = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    if "par_day" in body:
+        par_day = body["par_day"]
+        par_hour = body.get("par_hour", "")
+    else:
+        # Fallback: calculate from clock (audit runs shortly after the hour).
+        now = datetime.now(timezone.utc)
+        target = now - timedelta(hours=1)
+        par_day = target.strftime("%Y%m%d")
+        par_hour = f"{target.hour:02d}"
+
+    # Build per-period sensor key suffix.
+    sensor_suffix = f"#{par_day}T{par_hour}" if par_hour else f"#{par_day}"
 
     results = {}
     for stream in ("cdr", "seq"):
         pipeline_id = f"bronze-{stream}"
 
-        # Read sensor count
+        # Read per-period sensor count.
         sensor_resp = _dynamodb.get_item(
             TableName=_CONTROL_TABLE,
             Key={
                 "PK": {"S": f"PIPELINE#{pipeline_id}"},
-                "SK": {"S": "SENSOR#hourly-status"},
+                "SK": {"S": f"SENSOR#hourly-status{sensor_suffix}"},
             },
         )
         sensor_data = sensor_resp.get("Item", {}).get("data", {}).get("M", {})
         sensor_count = int(sensor_data.get("count", {}).get("N", "0"))
-        sensor_date = sensor_data.get("date", {}).get("S", "")
-        sensor_hour = sensor_data.get("hour", {}).get("S", "")
 
-        # Verify sensor is for the correct partition
-        if sensor_date != par_day or sensor_hour != par_hour:
-            logger.warning(
-                "%s sensor date/hour mismatch: sensor=%s/%s, expected=%s/%s",
-                stream, sensor_date, sensor_hour, par_day, par_hour,
-            )
-            results[stream] = {"match": False, "reason": "sensor_stale"}
+        if sensor_count == 0:
+            logger.warning("%s: no sensor data found for %s", stream, sensor_suffix)
+            results[stream] = {"match": False, "reason": "no_sensor_data"}
             continue
 
-        # Count records in Delta table partition
+        # Count records in Delta table partition.
         uri = f"s3://{_S3_BUCKET}/bronze/{stream}"
         try:
             dt = DeltaTable(uri)
@@ -72,13 +82,13 @@ def lambda_handler(event, context):
             stream, sensor_count, delta_count, match,
         )
 
-        # Write audit-result sensor
+        # Write per-period audit-result sensor.
         audit_now = datetime.now(timezone.utc).isoformat()
         _dynamodb.put_item(
             TableName=_CONTROL_TABLE,
             Item={
                 "PK": {"S": f"PIPELINE#{pipeline_id}"},
-                "SK": {"S": "SENSOR#audit-result"},
+                "SK": {"S": f"SENSOR#audit-result{sensor_suffix}"},
                 "data": {"M": {
                     "date": {"S": par_day},
                     "hour": {"S": par_hour},
