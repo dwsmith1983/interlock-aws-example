@@ -5,9 +5,9 @@ pipeline:
 
 schedule:
   trigger:
-    key: hourly-status
+    key: audit-result
     check: equals
-    field: complete
+    field: match
     value: true
   evaluation:
     window: 15m
@@ -20,10 +20,10 @@ sla:
 validation:
   trigger: "ALL"
   rules:
-    - key: hourly-status
-      check: gte
-      field: pct_of_expected
-      value: 0.85
+    - key: audit-result
+      check: equals
+      field: match
+      value: true
 
 job:
   type: glue
