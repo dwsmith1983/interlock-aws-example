@@ -32,3 +32,13 @@ job:
     arguments:
       "--s3_bucket": "${s3_bucket}"
   maxRetries: 2
+
+postRun:
+  evaluation:
+    interval: 30m
+    window: 2h
+  rules:
+    - key: daily-status
+      check: equals
+      field: all_hours_complete
+      value: true
