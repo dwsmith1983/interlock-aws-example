@@ -90,7 +90,7 @@ variable "glue_hourly_workers" {
 variable "glue_daily_workers" {
   description = "Number of Glue workers for daily aggregation jobs"
   type        = number
-  default     = 5
+  default     = 10
 }
 
 # Alerting

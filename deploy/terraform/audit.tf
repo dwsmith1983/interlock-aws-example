@@ -27,7 +27,7 @@ resource "aws_cloudwatch_log_group" "bronze_audit" {
 
 resource "aws_lambda_function_url" "bronze_audit" {
   function_name      = aws_lambda_function.bronze_audit.function_name
-  authorization_type = "AWS_IAM"
+  authorization_type = "NONE"
 }
 
 # IAM role for audit Lambda
