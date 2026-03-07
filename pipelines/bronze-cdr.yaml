@@ -4,8 +4,11 @@ pipeline:
   description: Bronze CDR audit — validates raw-to-bronze processing completeness
 
 schedule:
-  cron: "10 * * * *"
-  timezone: UTC
+  trigger:
+    key: hourly-status
+    check: equals
+    field: complete
+    value: true
   evaluation:
     window: 5m
     interval: 1m
@@ -34,6 +37,9 @@ job:
     timeout: 60
 
 postRun:
+  evaluation:
+    interval: 30m
+    window: 2h
   rules:
     - key: audit-result
       check: equals
