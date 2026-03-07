@@ -32,3 +32,13 @@ job:
     arguments:
       "--s3_bucket": "${s3_bucket}"
   maxRetries: 2
+
+postRun:
+  evaluation:
+    interval: 30m
+    window: 2h
+  rules:
+    - key: hourly-status
+      check: gte
+      field: count
+      value: 1
