@@ -83,12 +83,15 @@ def lambda_handler(event, context):
             stream, sensor_count, delta_count, match,
         )
 
-        # Write per-period audit-result sensor.
+        # Write per-period audit-result sensor under the SILVER pipeline ID
+        # so the stream-router triggers silver pipelines (sensor routing is
+        # scoped to the pipeline in the PK).
+        silver_pipeline_id = f"silver-{stream}-hour"
         audit_now = datetime.now(timezone.utc).isoformat()
         _dynamodb.put_item(
             TableName=_CONTROL_TABLE,
             Item={
-                "PK": {"S": f"PIPELINE#{pipeline_id}"},
+                "PK": {"S": f"PIPELINE#{silver_pipeline_id}"},
                 "SK": {"S": f"SENSOR#audit-result{sensor_suffix}"},
                 "data": {"M": {
                     "date": {"S": par_day},
