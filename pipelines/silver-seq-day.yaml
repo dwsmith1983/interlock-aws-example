@@ -32,12 +32,11 @@ job:
     arguments:
       "--s3_bucket": "${s3_bucket}"
   maxRetries: 2
+  maxDriftReruns: 1
   jobPollWindowSeconds: 7200
 
 postRun:
-  evaluation:
-    interval: 30m
-    window: 2h
+  sensorTimeout: 2h
   rules:
     - key: daily-status
       check: equals

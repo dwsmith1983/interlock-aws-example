@@ -49,10 +49,10 @@ Six pipelines are defined in `pipelines/` as declarative YAML:
 
 | Pipeline | Type | Trigger | Job |
 |----------|------|---------|-----|
-| `bronze-cdr` | Cron (:10) | Sensor `hourly-status` complete | Audit Lambda |
-| `bronze-seq` | Cron (:10) | Sensor `hourly-status` complete | Audit Lambda |
-| `silver-cdr-hour` | Event | Sensor `hourly-status` complete | Glue `cdr-agg-hour` |
-| `silver-seq-hour` | Event | Sensor `hourly-status` complete | Glue `seq-agg-hour` |
+| `bronze-cdr` | Event | Sensor `hourly-status` complete | Audit Lambda |
+| `bronze-seq` | Event | Sensor `hourly-status` complete | Audit Lambda |
+| `silver-cdr-hour` | Event | Sensor `audit-result` match | Glue `cdr-agg-hour` |
+| `silver-seq-hour` | Event | Sensor `audit-result` match | Glue `seq-agg-hour` |
 | `silver-cdr-day` | Event | Sensor `daily-status` all hours | Glue `cdr-agg-day` |
 | `silver-seq-day` | Event | Sensor `daily-status` all hours | Glue `seq-agg-day` |
 

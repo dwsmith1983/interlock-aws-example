@@ -35,9 +35,7 @@ job:
     functionName: "${environment}-bronze-audit"
 
 postRun:
-  evaluation:
-    interval: 30m
-    window: 2h
+  sensorTimeout: 2h
   rules:
     - key: audit-result
       check: equals
