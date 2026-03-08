@@ -12,6 +12,15 @@ module "interlock" {
   sfn_timeout_seconds  = 18000
   slack_bot_token      = var.slack_bot_token
   slack_channel_id     = var.slack_channel_id
+
+  lambda_concurrency = {
+    stream_router    = -1
+    orchestrator     = -1
+    sla_monitor      = -1
+    watchdog         = -1
+    event_sink       = -1
+    alert_dispatcher = -1
+  }
 }
 
 # Orchestrator needs permission to invoke audit Lambda directly
