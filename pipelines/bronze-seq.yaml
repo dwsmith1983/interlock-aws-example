@@ -30,11 +30,9 @@ validation:
       value: 0.7
 
 job:
-  type: http
+  type: lambda
   config:
-    method: POST
-    url: "${audit_function_url}"
-    timeout: 60
+    functionName: "${environment}-bronze-audit"
 
 postRun:
   evaluation:

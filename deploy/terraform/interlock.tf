@@ -14,7 +14,7 @@ module "interlock" {
   slack_channel_id     = var.slack_channel_id
 }
 
-# Orchestrator needs permission to invoke audit Lambda via function URL
+# Orchestrator needs permission to invoke audit Lambda directly
 resource "aws_iam_role_policy" "interlock_audit_invoke" {
   name = "audit-lambda-invoke"
   role = "${var.environment}-interlock-orchestrator"
@@ -22,7 +22,7 @@ resource "aws_iam_role_policy" "interlock_audit_invoke" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action   = "lambda:InvokeFunctionUrl"
+      Action   = "lambda:InvokeFunction"
       Effect   = "Allow"
       Resource = aws_lambda_function.bronze_audit.arn
     }]

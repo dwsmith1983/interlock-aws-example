@@ -25,11 +25,6 @@ resource "aws_cloudwatch_log_group" "bronze_audit" {
   retention_in_days = var.log_retention_days
 }
 
-resource "aws_lambda_function_url" "bronze_audit" {
-  function_name      = aws_lambda_function.bronze_audit.function_name
-  authorization_type = "NONE"
-}
-
 # IAM role for audit Lambda
 resource "aws_iam_role" "bronze_audit" {
   name = "${var.environment}-bronze-audit-role"

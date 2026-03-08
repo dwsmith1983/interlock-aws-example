@@ -58,10 +58,6 @@ output "interlock_sfn_arn" {
   value       = module.interlock.sfn_arn
 }
 
-output "audit_function_url" {
-  description = "Function URL for the bronze audit Lambda"
-  value       = aws_lambda_function_url.bronze_audit.function_url
-}
 
 output "dashboard_url" {
   description = "URL of the Interlock dashboard"
