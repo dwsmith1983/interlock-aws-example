@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import boto3
+import pyarrow.dataset as pds
 from deltalake import DeltaTable
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def lambda_handler(event, context):
             dt = DeltaTable(uri)
             ds = dt.to_pyarrow_dataset()
             filtered = ds.filter(
-                (ds.field("par_day") == par_day) & (ds.field("par_hour") == par_hour)
+                (pds.field("par_day") == par_day) & (pds.field("par_hour") == par_hour)
             )
             delta_count = filtered.count_rows()
         except Exception:
