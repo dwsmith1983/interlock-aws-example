@@ -33,6 +33,7 @@ job:
   type: lambda
   config:
     functionName: "${environment}-bronze-audit"
+    payload: '{"body": {"stream": "seq"}}'
 
 postRun:
   sensorTimeout: 2h

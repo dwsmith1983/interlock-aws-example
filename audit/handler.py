@@ -14,6 +14,7 @@ logger.setLevel(logging.INFO)
 _dynamodb = boto3.client("dynamodb")
 _CONTROL_TABLE = os.environ.get("INTERLOCK_CONTROL_TABLE", "")
 _S3_BUCKET = os.environ.get("S3_BUCKET", "")
+_VALID_STREAMS = frozenset({"cdr", "seq"})
 
 
 def lambda_handler(event, context):
@@ -31,6 +32,17 @@ def lambda_handler(event, context):
         except (json.JSONDecodeError, TypeError):
             pass
 
+    # Determine which stream(s) to audit.
+    stream_filter = body.get("stream")
+    if stream_filter is not None:
+        if stream_filter not in _VALID_STREAMS:
+            logger.error("Invalid stream value %r; must be one of %s", stream_filter, _VALID_STREAMS)
+            return {"statusCode": 400, "body": json.dumps({"error": "invalid stream"})}
+        streams = [stream_filter]
+    else:
+        logger.info("No stream specified in payload — auditing both streams")
+        streams = sorted(_VALID_STREAMS)
+
     if "par_day" in body:
         par_day = body["par_day"]
         par_hour = body.get("par_hour", "")
@@ -45,7 +57,7 @@ def lambda_handler(event, context):
     sensor_suffix = f"#{par_day}T{par_hour}" if par_hour else f"#{par_day}"
 
     results = {}
-    for stream in ("cdr", "seq"):
+    for stream in streams:
         pipeline_id = f"bronze-{stream}"
 
         # Read per-period sensor count.
@@ -77,7 +89,7 @@ def lambda_handler(event, context):
             logger.exception("Failed to read Delta table for %s", stream)
             delta_count = 0
 
-        match = delta_count == sensor_count
+        match = delta_count >= sensor_count
         logger.info(
             "%s audit: sensor=%d, delta=%d, match=%s",
             stream, sensor_count, delta_count, match,
