@@ -16,6 +16,7 @@ schedule:
 sla:
   deadline: ":15"
   expectedDuration: 3m
+  maxDuration: 10m
 
 validation:
   trigger: "ALL"
