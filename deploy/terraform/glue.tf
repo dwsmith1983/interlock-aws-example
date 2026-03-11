@@ -147,7 +147,7 @@ resource "aws_glue_job" "cdr_agg_day" {
   role_arn = aws_iam_role.glue.arn
 
   glue_version      = "4.0"
-  worker_type       = var.glue_worker_type
+  worker_type       = var.glue_daily_worker_type
   number_of_workers = var.glue_daily_workers
 
   execution_property {
@@ -207,7 +207,7 @@ resource "aws_glue_job" "seq_agg_day" {
   role_arn = aws_iam_role.glue.arn
 
   glue_version      = "4.0"
-  worker_type       = var.glue_worker_type
+  worker_type       = var.glue_daily_worker_type
   number_of_workers = var.glue_daily_workers
 
   execution_property {
