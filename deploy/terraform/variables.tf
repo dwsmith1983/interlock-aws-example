@@ -81,6 +81,12 @@ variable "glue_worker_type" {
   default     = "G.1X"
 }
 
+variable "glue_daily_worker_type" {
+  description = "Glue worker type for daily aggregation jobs (G.2X = 128 GB disk)"
+  type        = string
+  default     = "G.2X"
+}
+
 variable "glue_hourly_workers" {
   description = "Number of Glue workers for hourly aggregation jobs"
   type        = number
