@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dashboard deploy-dashboard upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-dashboard deploy-dashboard upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -72,6 +72,15 @@ build-daily-sensor:
 	@rm -rf $(BUILD_DIR)/daily-sensor-pkg
 	@echo "Built $(BUILD_DIR)/daily-sensor.zip"
 
+build-dryrun-demo:
+	@echo "Packaging dryrun-demo Lambda..."
+	@mkdir -p $(BUILD_DIR)/dryrun-demo-pkg
+	@pip install -r lambdas/dryrun_demo/requirements.txt -t $(BUILD_DIR)/dryrun-demo-pkg --quiet
+	@cp lambdas/dryrun_demo/handler.py $(BUILD_DIR)/dryrun-demo-pkg/
+	@cd $(BUILD_DIR)/dryrun-demo-pkg && zip -r ../dryrun-demo.zip . -x '*/__pycache__/*' '*.pyc' '*/.dist-info/*'
+	@rm -rf $(BUILD_DIR)/dryrun-demo-pkg
+	@echo "Built $(BUILD_DIR)/dryrun-demo.zip"
+
 build-dashboard:
 	@echo "Building dashboard static site..."
 	@cd dashboard && npm run build
@@ -83,7 +92,7 @@ deploy-dashboard:
 	aws s3 sync dashboard/dist/ s3://$(BUCKET) --delete
 	@echo "Dashboard deployed to s3://$(BUCKET)"
 
-build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:

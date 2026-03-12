@@ -10,6 +10,7 @@ Production-grade telecom ETL pipeline demonstrating [Interlock](https://github.c
 EventBridge (rate 15m)
   |- CDR rule --> telecom-generator Lambda --> S3 raw cdr/
   |- SEQ rule --> telecom-generator Lambda --> S3 raw seq/
+  |- rate(10m) -> dryrun-demo Lambda -> S3 dryrun-demo/ + sensors (dry run only)
                                                   |
                                           EventBridge S3 PutObject
                                                   |
@@ -45,7 +46,7 @@ Two data streams flow through three layers:
 
 ### Interlock Orchestration
 
-Six pipelines are defined in `pipelines/` as declarative YAML:
+Seven pipelines are defined in `pipelines/` as declarative YAML:
 
 | Pipeline | Type | Trigger | Job |
 |----------|------|---------|-----|
@@ -55,6 +56,7 @@ Six pipelines are defined in `pipelines/` as declarative YAML:
 | `silver-seq-hour` | Event | Sensor `audit-result` match | Glue `seq-agg-hour` |
 | `silver-cdr-day` | Event | Sensor `daily-status` all hours | Glue `cdr-agg-day` |
 | `silver-seq-day` | Event | Sensor `daily-status` all hours | Glue `seq-agg-day` |
+| `dryrun-weather` | Dry run | Sensor `weather-ready` complete | *(observation only)* |
 
 Silver pipelines are fully event-driven — no cron schedules. The bronze consumer writes per-period sensor records to DynamoDB (one row per hour, one per day). When a sensor satisfies the trigger condition, the stream-router starts a Step Functions execution for that period.
 
@@ -68,6 +70,47 @@ Each hour gets its own sensor record and SFN execution:
 - SLA deadline `:30` resolves to `T10:30:00Z` for hour 10
 
 Daily pipelines accumulate completed hours in a StringSet. When all 24 arrive, `all_hours_complete=true` fires the daily SFN.
+
+### Dry Run Demo
+
+The `dryrun-weather` pipeline demonstrates Interlock's dry run mode (`dryRun: true`). It evaluates trigger conditions and SLA timing against real sensor data but never starts Step Function executions — letting teams observe Interlock behavior alongside existing scheduled pipelines before switching to full control.
+
+**How it works:**
+
+1. EventBridge invokes `dryrun-demo` Lambda every 10 minutes (6x/hour)
+2. Each invocation generates a variable batch of weather station readings (1-6 stations, time-of-day weighted)
+3. Lambda writes readings to S3 (`dryrun-demo/par_day=YYYYMMDD/par_hour=HH/`)
+4. Lambda updates two sensors in the Interlock control table:
+   - `weather-ready` — trigger sensor tracking `total_readings`, `valid_readings`, and `complete`
+   - `weather-audit` — post-run sensor tracking `total_readings` for drift detection
+5. When `total_readings >= 12 AND valid_pct >= 0.75`, the stream-router emits dry run events
+
+**Events emitted (all observation-only, no executions started):**
+
+| Event | When |
+|-------|------|
+| `DRY_RUN_WOULD_TRIGGER` | Trigger condition met |
+| `DRY_RUN_SLA_PROJECTION` | SLA met/breach estimate (deadline `:45`) |
+| `DRY_RUN_LATE_DATA` | Sensor updated after trigger fired |
+| `DRY_RUN_DRIFT` | Audit reading count diverged from baseline |
+
+**Variation model:** Batch sizes vary by time of day (day hours 06-23 UTC average ~3.7 readings; night hours 00-05 UTC average ~2.2). About 15% of readings are degraded quality (< 0.7). This produces natural variation — some hours trigger early with margin, others trigger late or not at all.
+
+**Manual test:**
+
+```bash
+# Invoke once
+aws lambda invoke --function-name dev-dryrun-demo --payload '{}' /tmp/out.json
+cat /tmp/out.json
+
+# Check sensors
+aws dynamodb query --table-name dev-interlock-control \
+  --key-condition-expression 'PK = :pk AND begins_with(SK, :sk)' \
+  --expression-attribute-values '{":pk":{"S":"PIPELINE#dryrun-weather"},":sk":{"S":"SENSOR#"}}' \
+  --query 'Items[*].{SK:SK.S,data:data.M}'
+
+# Invoke 4-5 more times to trigger completion, then check for DRY_RUN markers
+```
 
 ## Data Streams
 
@@ -232,6 +275,11 @@ pipelines/
     silver-seq-hour.yaml    # Silver SEQ hourly aggregation
     silver-cdr-day.yaml     # Silver CDR daily aggregation
     silver-seq-day.yaml     # Silver SEQ daily aggregation
+    dryrun-weather.yaml     # Dry run demo — weather station aggregation (observation only)
+lambdas/
+    dryrun_demo/
+        handler.py          # Weather station simulation (EventBridge 10-min schedule)
+        requirements.txt
 scripts/
     backfill.sh             # Historical data generation
     build_interlock.sh      # Build Go Lambda binaries from interlock repo
