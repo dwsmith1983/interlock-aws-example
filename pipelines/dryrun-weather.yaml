@@ -1,0 +1,49 @@
+pipeline:
+  id: dryrun-weather
+  owner: data-platform
+  description: "Dry run demo — weather station aggregation, observation only"
+
+dryRun: true
+
+schedule:
+  trigger:
+    key: weather-ready
+    check: equals
+    field: complete
+    value: true
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: ":45"
+  expectedDuration: 5m
+  maxDuration: 15m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: weather-ready
+      check: equals
+      field: complete
+      value: true
+    - key: weather-ready
+      check: gte
+      field: total_readings
+      value: 12
+
+job:
+  type: lambda
+  config:
+    # Placeholder name is intentional — dryRun: true means the orchestrator never
+    # invokes this function. A non-existent name proves the no-invoke guarantee.
+    functionName: "${environment}-dryrun-placeholder"
+
+postRun:
+  sensorTimeout: 1h
+  driftField: total_readings
+  rules:
+    - key: weather-audit
+      check: gte
+      field: total_readings
+      value: 1
