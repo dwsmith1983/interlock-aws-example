@@ -100,6 +100,17 @@ variable "glue_daily_workers" {
 }
 
 # Alerting
+variable "deploy_pipelines" {
+  description = "Which pipeline groups to deploy: dryrun, cdr, seq"
+  type        = set(string)
+  default     = ["dryrun", "cdr", "seq"]
+
+  validation {
+    condition     = alltrue([for p in var.deploy_pipelines : contains(["dryrun", "cdr", "seq"], p)])
+    error_message = "Valid values: \"dryrun\", \"cdr\", \"seq\""
+  }
+}
+
 variable "slack_bot_token" {
   description = "Slack Bot API token for pipeline alerts (empty = logging only)"
   type        = string
