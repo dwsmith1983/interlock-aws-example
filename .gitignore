@@ -16,6 +16,7 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+analysis/
 
 # IDE
 .idea/
