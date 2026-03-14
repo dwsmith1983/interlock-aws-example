@@ -16,7 +16,7 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
-analysis/
+*.ipynb_checkpoints/
 
 # IDE
 .idea/
