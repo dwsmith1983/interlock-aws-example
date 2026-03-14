@@ -57,8 +57,10 @@ def handler(event: dict, context: object) -> dict:
 
     sensor_suffix = f"#{par_day}T{par_hour}"
 
-    _update_trigger_sensor(sensor_suffix, par_day, par_hour, total_count, valid_count, now_iso)
-    _update_audit_sensor(sensor_suffix, par_day, par_hour, total_count, now_iso)
+    period = f"{par_day}T{par_hour}"
+
+    _update_trigger_sensor(sensor_suffix, period, total_count, valid_count, now_iso)
+    _update_audit_sensor(sensor_suffix, period, total_count, now_iso)
 
     logger.info(
         "dryrun-weather %sT%s: wrote %d readings (%d valid) to S3 and sensors",
@@ -133,8 +135,7 @@ def _ensure_data_map(key: dict) -> None:
 
 def _update_trigger_sensor(
     sensor_suffix: str,
-    par_day: str,
-    par_hour: str,
+    period: str,
     total_count: int,
     valid_count: int,
     now_iso: str,
@@ -155,18 +156,16 @@ def _update_trigger_sensor(
         TableName=_CONTROL_TABLE,
         Key=key,
         UpdateExpression=(
-            "SET #data.#date = :date, #data.#hour = :hour, #data.updatedAt = :now "
+            "SET #data.#period = :period, #data.updatedAt = :now "
             "ADD #data.total_readings :total, #data.valid_readings :valid, "
             "#data.batches_received :one"
         ),
         ExpressionAttributeNames={
             "#data": "data",
-            "#date": "date",
-            "#hour": "hour",
+            "#period": "period",
         },
         ExpressionAttributeValues={
-            ":date": {"S": par_day},
-            ":hour": {"S": par_hour},
+            ":period": {"S": period},
             ":now": {"S": now_iso},
             ":total": {"N": str(total_count)},
             ":valid": {"N": str(valid_count)},
@@ -218,8 +217,7 @@ def _update_trigger_sensor(
 
 def _update_audit_sensor(
     sensor_suffix: str,
-    par_day: str,
-    par_hour: str,
+    period: str,
     total_count: int,
     now_iso: str,
 ) -> None:
@@ -238,17 +236,15 @@ def _update_audit_sensor(
         TableName=_CONTROL_TABLE,
         Key=key,
         UpdateExpression=(
-            "SET #data.#date = :date, #data.#hour = :hour, #data.updatedAt = :now "
+            "SET #data.#period = :period, #data.updatedAt = :now "
             "ADD #data.total_readings :total"
         ),
         ExpressionAttributeNames={
             "#data": "data",
-            "#date": "date",
-            "#hour": "hour",
+            "#period": "period",
         },
         ExpressionAttributeValues={
-            ":date": {"S": par_day},
-            ":hour": {"S": par_hour},
+            ":period": {"S": period},
             ":now": {"S": now_iso},
             ":total": {"N": str(total_count)},
         },
