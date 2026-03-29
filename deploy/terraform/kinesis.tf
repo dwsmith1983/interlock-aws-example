@@ -8,6 +8,9 @@ resource "aws_kinesis_stream" "raw_events" {
 
   retention_period = 24
 
+  encryption_type = var.enable_cmk_encryption ? "KMS" : "NONE"
+  kms_key_id      = local.kms_key_arn
+
   tags = {
     Component = "bronze-pipeline"
   }

@@ -202,6 +202,9 @@ resource "aws_sqs_queue" "bronze_dlq" {
   name                      = "${var.environment}-bronze-consumer-dlq"
   message_retention_seconds = 1209600 # 14 days
 
+  kms_master_key_id                 = local.kms_key_arn
+  kms_data_key_reuse_period_seconds = var.enable_cmk_encryption ? 300 : null
+
   tags = {
     Component = "bronze-pipeline"
   }

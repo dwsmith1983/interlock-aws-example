@@ -9,6 +9,14 @@ resource "aws_dynamodb_table" "phone_hash" {
     type = "S"
   }
 
+  dynamic "server_side_encryption" {
+    for_each = var.enable_cmk_encryption ? [1] : []
+    content {
+      enabled     = true
+      kms_key_arn = local.kms_key_arn
+    }
+  }
+
   tags = {
     Component = "bronze-pipeline"
   }

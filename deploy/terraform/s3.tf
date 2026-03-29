@@ -34,3 +34,16 @@ resource "aws_s3_bucket_public_access_block" "telecom_data" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "data" {
+  count  = var.enable_cmk_encryption ? 1 : 0
+  bucket = aws_s3_bucket.telecom_data.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = local.kms_key_arn
+    }
+    bucket_key_enabled = true
+  }
+}
