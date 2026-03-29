@@ -30,3 +30,5 @@ __pycache__/
 .DS_Store
 chaos/terraform/.terraform/
 chaos/controller
+banking/terraform/.terraform/
+banking/terraform/.terraform.lock.hcl
