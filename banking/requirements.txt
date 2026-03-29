@@ -1,0 +1,2 @@
+# boto3 is provided by the AWS Lambda Python runtime -- no additional
+# dependencies are required for the banking pipeline Lambdas.

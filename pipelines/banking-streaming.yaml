@@ -1,0 +1,41 @@
+pipeline:
+  id: banking-streaming
+  owner: data-platform
+  description: "Banking streaming pipeline -- triggers aggregation after COB when consumer lag is acceptable"
+
+schedule:
+  trigger:
+    key: cob_status
+    check: equals
+    field: complete
+    value: true
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: "17:00"
+  expectedDuration: 10m
+  maxDuration: 30m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: cob_status
+      check: equals
+      field: complete
+      value: true
+    - key: consumer_lag
+      check: lte
+      field: lag_seconds
+      value: 300
+
+job:
+  type: lambda
+  config:
+    functionName: "${environment}-banking-aggregator"
+    payload: '{"body": {"pipeline": "banking-streaming"}}'
+
+postRun:
+  sensorTimeout: 2h
+  rules: []

@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-dashboard deploy-dashboard upload-glue-scripts build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-dashboard deploy-dashboard upload-glue-scripts build-banking-generator build-banking-consumer build-banking-aggregator build-banking build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -92,7 +92,32 @@ deploy-dashboard:
 	aws s3 sync dashboard/dist/ s3://$(BUCKET) --delete
 	@echo "Dashboard deployed to s3://$(BUCKET)"
 
-build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo
+# Banking pipeline build targets
+build-banking-generator:
+	@echo "Packaging banking-generator Lambda..."
+	@mkdir -p $(BUILD_DIR)/banking-generator-pkg
+	@cp banking/generator/handler.py $(BUILD_DIR)/banking-generator-pkg/
+	@cd $(BUILD_DIR)/banking-generator-pkg && zip -r ../banking-generator.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/banking-generator.zip"
+
+build-banking-consumer:
+	@echo "Packaging banking-consumer Lambda..."
+	@mkdir -p $(BUILD_DIR)/banking-consumer-pkg
+	@cp banking/consumer/handler.py $(BUILD_DIR)/banking-consumer-pkg/
+	@cd $(BUILD_DIR)/banking-consumer-pkg && zip -r ../banking-consumer.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/banking-consumer.zip"
+
+build-banking-aggregator:
+	@echo "Packaging banking-aggregator Lambda..."
+	@mkdir -p $(BUILD_DIR)/banking-aggregator-pkg
+	@cp banking/aggregator/handler.py $(BUILD_DIR)/banking-aggregator-pkg/
+	@cd $(BUILD_DIR)/banking-aggregator-pkg && zip -r ../banking-aggregator.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/banking-aggregator.zip"
+
+build-banking: build-banking-generator build-banking-consumer build-banking-aggregator
+	@echo "Banking pipeline Lambda packages built."
+
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-banking
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:
