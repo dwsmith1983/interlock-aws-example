@@ -1,0 +1,29 @@
+name: late-data-bronze
+description: >-
+  Holds S3 objects in staging prefix via S3Transport.Hold() to simulate
+  late-arriving data. Bronze sensor never reaches complete within the
+  evaluation window, triggering SENSOR_DEADLINE_EXPIRED and SLA_BREACH.
+category: data-arrival
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.3
+safety:
+  max_affected_pct: 25
+  cooldown: 5m
+  sla_aware: true
+mutation:
+  type: delay
+  params:
+    duration: "30m"
+    release: "true"
+expected_response:
+  within: 45m
+  asserts:
+    - type: interlock_event
+      target: bronze-cdr
+      condition: exists

@@ -1,0 +1,31 @@
+name: lag-detection-banking
+description: >-
+  Writes a phantom sensor record with lag_seconds: 301 to the control
+  table for the banking pipeline consumer_lag sensor. Lag exceeds the
+  300s threshold despite COB flag being true, triggering
+  VALIDATION_EXHAUSTED which blocks the downstream aggregation job.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: banking-streaming
+probability: 0.3
+safety:
+  max_affected_pct: 100
+  cooldown: 10m
+  sla_aware: false
+mutation:
+  type: phantom-sensor
+  params:
+    pipeline: banking-streaming
+    key: consumer_lag
+    lag_seconds: "301"
+expected_response:
+  within: 10m
+  asserts:
+    - type: interlock_event
+      target: banking-streaming
+      condition: exists

@@ -1,0 +1,29 @@
+name: post-run-drift-silver
+description: >-
+  Delivers new data to raw/cdr/ after the silver pipeline has already
+  completed processing for that hour. Sensor count changes after job
+  completion, triggering POST_RUN_DRIFT and RERUN_ACCEPTED.
+category: data-quality
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.2
+safety:
+  max_affected_pct: 10
+  cooldown: 10m
+  sla_aware: true
+mutation:
+  type: post-run-drift
+  params:
+    drift_delay: "15m"
+    file_count: "3"
+expected_response:
+  within: 30m
+  asserts:
+    - type: interlock_event
+      target: silver-cdr-hour
+      condition: exists
