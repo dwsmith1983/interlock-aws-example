@@ -1,0 +1,32 @@
+name: missing-hour-bronze
+description: >-
+  Drops delivery of one hour of CDR data by suppressing all S3 objects for
+  a single hourly partition. Bronze sensor never reaches complete, and the
+  silver pipeline remains blocked with VALIDATION_EXHAUSTED.
+category: data-arrival
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.2
+safety:
+  max_affected_pct: 10
+  cooldown: 10m
+  sla_aware: true
+mutation:
+  type: drop
+  params:
+    scope: "hour"
+    partition_count: "1"
+expected_response:
+  within: 60m
+  asserts:
+    - type: sensor_state
+      target: bronze-cdr
+      condition: is_pending
+    - type: event_emitted
+      target: VALIDATION_EXHAUSTED
+      condition: exists

@@ -1,0 +1,28 @@
+name: out-of-order-bronze
+description: >-
+  Reorders records within CDR data files to verify that the pipeline
+  handles non-sequential data gracefully. No interlock event is expected;
+  this scenario tests pipeline resilience to record ordering.
+category: data-quality
+severity: low
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.3
+safety:
+  max_affected_pct: 25
+  cooldown: 5m
+  sla_aware: true
+mutation:
+  type: out-of-order
+  params:
+    shuffle_seed: "42"
+expected_response:
+  within: 30m
+  asserts:
+    - type: job_state
+      target: bronze-cdr
+      condition: status:success

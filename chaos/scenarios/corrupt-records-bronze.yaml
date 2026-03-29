@@ -1,0 +1,32 @@
+name: corrupt-records-bronze
+description: >-
+  Injects null values and type corruption into CDR records within the
+  bronze layer. Causes bronze audit row-count mismatch and triggers
+  POST_RUN_VALIDATION_FAILED on the bronze pipeline.
+category: data-quality
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.25
+safety:
+  max_affected_pct: 15
+  cooldown: 10m
+  sla_aware: true
+mutation:
+  type: corrupt
+  params:
+    corruption_type: "null_and_type"
+    affected_pct: "10"
+expected_response:
+  within: 30m
+  asserts:
+    - type: interlock_event
+      target: POST_RUN_VALIDATION_FAILED
+      condition: exists
+    - type: job_state
+      target: bronze-cdr
+      condition: status:failed

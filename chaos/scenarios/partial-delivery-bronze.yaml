@@ -1,0 +1,29 @@
+name: partial-delivery-bronze
+description: >-
+  Delivers only a subset of expected CDR files for a partition, causing
+  pct_of_expected to fall below 0.85. Bronze sensor remains incomplete
+  and the pipeline stalls waiting for remaining files.
+category: data-arrival
+severity: low
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.3
+safety:
+  max_affected_pct: 20
+  cooldown: 5m
+  sla_aware: true
+mutation:
+  type: partial
+  params:
+    delivery_pct: "60"
+    threshold: "0.85"
+expected_response:
+  within: 45m
+  asserts:
+    - type: sensor_state
+      target: bronze-cdr
+      condition: is_pending

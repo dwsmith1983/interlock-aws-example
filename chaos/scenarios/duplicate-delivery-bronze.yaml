@@ -1,0 +1,31 @@
+name: duplicate-delivery-bronze
+description: >-
+  Re-delivers the same CDR partition a second time to verify bronze MERGE
+  idempotency. The pipeline should handle duplicates gracefully without
+  producing duplicate rows in the target table.
+category: data-quality
+severity: low
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.3
+safety:
+  max_affected_pct: 20
+  cooldown: 5m
+  sla_aware: true
+mutation:
+  type: duplicate
+  params:
+    replay_count: "1"
+expected_response:
+  within: 30m
+  asserts:
+    - type: data_state
+      target: bronze-cdr
+      condition: exists
+    - type: job_state
+      target: bronze-cdr
+      condition: status:success

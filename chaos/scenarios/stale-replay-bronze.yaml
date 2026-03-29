@@ -1,0 +1,31 @@
+name: stale-replay-bronze
+description: >-
+  Re-delivers CDR data for dates that have already been fully processed
+  and marked complete. The interlock system should detect the already-
+  completed trigger and skip re-processing.
+category: data-arrival
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.2
+safety:
+  max_affected_pct: 10
+  cooldown: 10m
+  sla_aware: true
+mutation:
+  type: stale-replay
+  params:
+    days_old: "3"
+expected_response:
+  within: 30m
+  asserts:
+    - type: trigger_state
+      target: bronze-cdr
+      condition: status:success
+    - type: rerun_state
+      target: bronze-cdr
+      condition: not_exists

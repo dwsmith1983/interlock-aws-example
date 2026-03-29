@@ -1,0 +1,29 @@
+name: schema-drift-glue
+description: >-
+  Adds and removes columns in CDR data files to simulate upstream schema
+  drift. Glue job fails with a PERMANENT failure classification due to
+  incompatible schema changes.
+category: data-quality
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.15
+safety:
+  max_affected_pct: 10
+  cooldown: 15m
+  sla_aware: true
+mutation:
+  type: schema-drift
+  params:
+    add_columns: "extra_field_1,extra_field_2"
+    remove_columns: "call_duration"
+expected_response:
+  within: 30m
+  asserts:
+    - type: job_state
+      target: glue-bronze-cdr
+      condition: status:failed

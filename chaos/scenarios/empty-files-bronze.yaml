@@ -1,0 +1,28 @@
+name: empty-files-bronze
+description: >-
+  Delivers structurally valid but empty CDR files (headers only, zero
+  records). Sensor count registers as 0 and pct_of_expected fails the
+  minimum threshold, leaving the sensor incomplete.
+category: data-quality
+severity: low
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: raw/cdr/
+probability: 0.3
+safety:
+  max_affected_pct: 20
+  cooldown: 5m
+  sla_aware: true
+mutation:
+  type: empty
+  params:
+    preserve_headers: "true"
+expected_response:
+  within: 30m
+  asserts:
+    - type: sensor_state
+      target: bronze-cdr
+      condition: is_pending
