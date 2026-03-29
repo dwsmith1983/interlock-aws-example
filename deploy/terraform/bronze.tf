@@ -27,6 +27,7 @@ resource "aws_lambda_function" "bronze_consumer" {
 resource "aws_cloudwatch_log_group" "bronze_consumer" {
   name              = "/aws/lambda/${var.environment}-bronze-consumer"
   retention_in_days = var.log_retention_days
+  kms_key_id        = local.kms_key_arn
 }
 
 # IAM role
@@ -208,4 +209,25 @@ resource "aws_sqs_queue" "bronze_dlq" {
   tags = {
     Component = "bronze-pipeline"
   }
+}
+
+resource "aws_iam_role_policy" "bronze_consumer_kms" {
+  count = var.enable_cmk_encryption ? 1 : 0
+  name  = "kms-access"
+  role  = aws_iam_role.bronze_consumer.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Effect   = "Allow"
+        Resource = [local.kms_key_arn]
+      }
+    ]
+  })
 }

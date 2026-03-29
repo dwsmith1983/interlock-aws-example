@@ -23,6 +23,7 @@ resource "aws_lambda_function" "bronze_audit" {
 resource "aws_cloudwatch_log_group" "bronze_audit" {
   name              = "/aws/lambda/${var.environment}-bronze-audit"
   retention_in_days = var.log_retention_days
+  kms_key_id        = local.kms_key_arn
 }
 
 # IAM role for audit Lambda
@@ -85,5 +86,26 @@ resource "aws_iam_role_policy" "bronze_audit_dynamodb" {
       Effect   = "Allow"
       Resource = module.interlock.control_table_arn
     }]
+  })
+}
+
+resource "aws_iam_role_policy" "bronze_audit_kms" {
+  count = var.enable_cmk_encryption ? 1 : 0
+  name  = "kms-access"
+  role  = aws_iam_role.bronze_audit.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Effect   = "Allow"
+        Resource = [local.kms_key_arn]
+      }
+    ]
   })
 }

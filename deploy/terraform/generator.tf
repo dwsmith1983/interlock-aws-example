@@ -75,6 +75,7 @@ resource "aws_iam_role_policy" "telecom_generator_logs" {
 resource "aws_cloudwatch_log_group" "telecom_generator" {
   name              = "/aws/lambda/${var.environment}-telecom-generator"
   retention_in_days = var.log_retention_days
+  kms_key_id        = local.kms_key_arn
 }
 
 resource "aws_cloudwatch_event_rule" "cdr" {
@@ -121,4 +122,25 @@ resource "aws_lambda_permission" "seq" {
   function_name = aws_lambda_function.telecom_generator.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.seq.arn
+}
+
+resource "aws_iam_role_policy" "telecom_generator_kms" {
+  count = var.enable_cmk_encryption ? 1 : 0
+  name  = "kms-access"
+  role  = aws_iam_role.telecom_generator.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Effect   = "Allow"
+        Resource = [local.kms_key_arn]
+      }
+    ]
+  })
 }

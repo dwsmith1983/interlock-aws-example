@@ -66,3 +66,9 @@ variable "tags" {
     ManagedBy = "terraform"
   }
 }
+
+variable "kms_key_arn" {
+  description = "KMS key ARN for encryption. Null when CMK encryption is disabled."
+  type        = string
+  default     = null
+}

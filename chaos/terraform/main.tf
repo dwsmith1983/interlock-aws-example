@@ -38,6 +38,7 @@ resource "aws_lambda_function" "chaos_controller" {
 resource "aws_cloudwatch_log_group" "chaos_controller" {
   name              = "/aws/lambda/${var.environment}-chaos-controller"
   retention_in_days = var.log_retention_days
+  kms_key_id        = var.kms_key_arn
   tags              = var.tags
 }
 
@@ -158,4 +159,25 @@ resource "aws_lambda_permission" "chaos_eventbridge" {
   function_name = aws_lambda_function.chaos_controller.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.chaos_schedule.arn
+}
+
+resource "aws_iam_role_policy" "chaos_controller_kms" {
+  count = var.kms_key_arn != null ? 1 : 0
+  name  = "kms-access"
+  role  = aws_iam_role.chaos_controller.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Effect   = "Allow"
+        Resource = [var.kms_key_arn]
+      }
+    ]
+  })
 }

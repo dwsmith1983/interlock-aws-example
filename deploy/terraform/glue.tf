@@ -231,3 +231,24 @@ resource "aws_glue_job" "seq_agg_day" {
     Component = "silver-pipeline"
   }
 }
+
+resource "aws_iam_role_policy" "glue_kms" {
+  count = var.enable_cmk_encryption ? 1 : 0
+  name  = "kms-access"
+  role  = aws_iam_role.glue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Effect   = "Allow"
+        Resource = [local.kms_key_arn]
+      }
+    ]
+  })
+}
