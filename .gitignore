@@ -3,13 +3,17 @@ build/
 *.zip
 
 # Terraform
-deploy/terraform/.terraform/
+**/.terraform/
+**/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
 *.tfplan
 tfplan
 !terraform.tfvars.example
+
+# Go binaries
+chaos/controller
 
 # Python
 __pycache__/
@@ -28,7 +32,3 @@ __pycache__/
 
 # OS
 .DS_Store
-chaos/terraform/.terraform/
-chaos/controller
-banking/terraform/.terraform/
-**/.terraform.lock.hcl
