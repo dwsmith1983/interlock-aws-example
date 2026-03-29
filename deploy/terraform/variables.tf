@@ -123,3 +123,9 @@ variable "slack_channel_id" {
   type        = string
   default     = ""
 }
+
+variable "enable_cmk_encryption" {
+  description = "Enable customer-managed KMS encryption for all resources (S3, SQS, Kinesis, DynamoDB, CloudWatch Logs). Default: false (uses AWS-managed encryption)."
+  type        = bool
+  default     = false
+}
