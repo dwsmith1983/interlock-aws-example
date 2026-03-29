@@ -31,5 +31,4 @@ __pycache__/
 chaos/terraform/.terraform/
 chaos/controller
 banking/terraform/.terraform/
-banking/terraform/.terraform.lock.hcl
-iot/terraform/.terraform.lock.hcl
+**/.terraform.lock.hcl
