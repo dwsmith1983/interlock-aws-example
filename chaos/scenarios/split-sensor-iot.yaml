@@ -1,0 +1,33 @@
+name: split-sensor-iot
+description: >-
+  Writes conflicting data to machine_07_status: temperature reads 25C
+  (normal range) but status field is set to critical. Interlock detects
+  the logical inconsistency between sensor fields.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: iot-factory
+probability: 0.2
+safety:
+  max_affected_pct: 100
+  cooldown: 10m
+  sla_aware: false
+mutation:
+  type: split-sensor
+  params:
+    pipeline: iot-factory
+    key: machine_07_status
+    overrides: '{"temperature": 25, "status": "critical"}'
+expected_response:
+  within: 10m
+  asserts:
+    - type: sensor_state
+      target: machine_07_status
+      condition: is_stale
+    - type: interlock_event
+      target: iot-factory
+      condition: exists

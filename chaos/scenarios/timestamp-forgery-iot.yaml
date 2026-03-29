@@ -1,0 +1,33 @@
+name: timestamp-forgery-iot
+description: >-
+  Sets machine_01_status updated_at to 2 hours in the future. Interlock
+  detects the impossible future timestamp and rejects the sensor reading.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: iot-factory
+probability: 0.2
+safety:
+  max_affected_pct: 100
+  cooldown: 10m
+  sla_aware: false
+mutation:
+  type: timestamp-forgery
+  params:
+    pipeline: iot-factory
+    key: machine_01_status
+    field: updated_at
+    offset: "+2h"
+expected_response:
+  within: 10m
+  asserts:
+    - type: sensor_state
+      target: machine_01_status
+      condition: is_stale
+    - type: interlock_event
+      target: iot-factory
+      condition: exists

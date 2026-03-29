@@ -1,0 +1,34 @@
+name: phantom-sensor-iot
+description: >-
+  Creates a phantom sensor for machine_11 which does not exist in the
+  factory configuration. The consumer derives healthy_count as 11 out of
+  10 expected machines, causing the gte validation to pass but exposing
+  a count mismatch.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: iot-factory
+probability: 0.3
+safety:
+  max_affected_pct: 100
+  cooldown: 10m
+  sla_aware: false
+mutation:
+  type: phantom-sensor
+  params:
+    pipeline: iot-factory
+    key: machine_11_status
+    data: '{"status": "healthy", "temperature": 35, "vibration": 12, "pressure": 5, "readings_count": 60}'
+expected_response:
+  within: 10m
+  asserts:
+    - type: sensor_state
+      target: factory_health
+      condition: is_ready
+    - type: interlock_event
+      target: iot-factory
+      condition: exists

@@ -1,0 +1,33 @@
+name: sensor-flapping-iot
+description: >-
+  Rapidly toggles machine_05_status between healthy and critical states
+  during the evaluation window. Interlock observes inconsistent sensor
+  readings across evaluation interval checks.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: iot-factory
+probability: 0.2
+safety:
+  max_affected_pct: 100
+  cooldown: 15m
+  sla_aware: false
+mutation:
+  type: sensor-flapping
+  params:
+    pipeline: iot-factory
+    key: machine_05_status
+    field: status
+    values: "healthy,critical"
+    interval: "30s"
+    duration: "5m"
+expected_response:
+  within: 10m
+  asserts:
+    - type: interlock_event
+      target: iot-factory
+      condition: exists

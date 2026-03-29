@@ -1,0 +1,34 @@
+name: stale-sensor-iot
+description: >-
+  Ages machine_03_status timestamp backward by 1 hour via the stale-sensor
+  mutation. The consumer re-derives factory_health with a stale updated_at,
+  causing interlock's age_lt 5m validation to fail and block the
+  aggregation job.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: iot-factory
+probability: 0.3
+safety:
+  max_affected_pct: 100
+  cooldown: 10m
+  sla_aware: false
+mutation:
+  type: stale-sensor
+  params:
+    pipeline: iot-factory
+    key: machine_03_status
+    age_offset: "1h"
+expected_response:
+  within: 10m
+  asserts:
+    - type: sensor_state
+      target: factory_health
+      condition: is_stale
+    - type: interlock_event
+      target: iot-factory
+      condition: exists

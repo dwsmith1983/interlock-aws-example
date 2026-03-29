@@ -1,0 +1,45 @@
+pipeline:
+  id: iot-factory
+  owner: data-platform
+  description: Factory floor IoT sensor aggregation
+
+schedule:
+  trigger:
+    key: factory_health
+    check: equals
+    field: all_healthy
+    value: true
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: ":15"
+  expectedDuration: 3m
+  maxDuration: 10m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: factory_health
+      check: equals
+      field: all_healthy
+      value: true
+    - key: factory_health
+      check: gte
+      field: healthy_count
+      value: 10
+    - key: factory_health
+      check: age_lt
+      field: updated_at
+      value: 5m
+
+job:
+  type: lambda
+  config:
+    functionName: "${environment}-iot-aggregator"
+    payload: '{"body": {"pipeline": "iot-factory"}}'
+
+postRun:
+  sensorTimeout: 2h
+  rules: []
