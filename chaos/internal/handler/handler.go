@@ -49,6 +49,7 @@ type Handler struct {
 	emitter     adapter.EventEmitter
 	sensorStore adapter.SensorStore
 	safetyCtrl  adapter.SafetyController
+	resolver    adapter.DependencyResolver
 	bucket      string
 	prefix      string
 	maxSeverity types.Severity
@@ -61,6 +62,7 @@ type Config struct {
 	Emitter     adapter.EventEmitter
 	SensorStore adapter.SensorStore
 	SafetyCtrl  adapter.SafetyController
+	Resolver    adapter.DependencyResolver
 	Bucket      string
 	Prefix      string
 	MaxSeverity types.Severity
@@ -74,6 +76,7 @@ func New(cfg Config) *Handler {
 		emitter:     cfg.Emitter,
 		sensorStore: cfg.SensorStore,
 		safetyCtrl:  cfg.SafetyCtrl,
+		resolver:    cfg.Resolver,
 		bucket:      cfg.Bucket,
 		prefix:      cfg.Prefix,
 		maxSeverity: cfg.MaxSeverity,
@@ -149,6 +152,9 @@ func (h *Handler) Handle(ctx context.Context, input ChaosInput) (ChaosOutput, er
 	}
 	if h.safetyCtrl != nil {
 		opts = append(opts, engine.WithSafety(h.safetyCtrl))
+	}
+	if h.resolver != nil {
+		opts = append(opts, engine.WithDependencyResolver(h.resolver))
 	}
 
 	eng := engine.New(engineCfg, h.transport, registry, filtered, opts...)

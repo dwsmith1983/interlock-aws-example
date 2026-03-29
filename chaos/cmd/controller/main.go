@@ -52,6 +52,7 @@ func main() {
 	}
 	controlState := chaosaws.NewDynamoDBState(dynamoClient, controlTable)
 	safety := chaosaws.NewDynamoDBSafety(dynamoClient, controlTable, 5*time.Minute)
+	resolver := chaosaws.NewDynamoDBDependencyResolver(dynamoClient, controlTable)
 
 	h := handler.New(handler.Config{
 		S3Fetcher:   handler.NewS3Client(s3Client),
@@ -59,6 +60,7 @@ func main() {
 		Emitter:     emitter,
 		SensorStore: controlState,
 		SafetyCtrl:  safety,
+		Resolver:    resolver,
 		Bucket:      bucket,
 		Prefix:      prefix,
 		MaxSeverity: maxSev,
