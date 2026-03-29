@@ -1,0 +1,36 @@
+name: rolling-degradation-ml
+description: >-
+  Gradually degrades feature quality in raw CSV files across successive
+  runs by injecting increasing noise. Model accuracy degrades from 0.97
+  to below 0.95 over 3-4 runs. Evaluation starts rejecting models and
+  deployment is blocked.
+category: data-quality
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: ml/raw/
+probability: 0.15
+safety:
+  max_affected_pct: 100
+  cooldown: 60m
+  sla_aware: false
+mutation:
+  type: rolling-degradation
+  params:
+    pipeline: ml-data-prep
+    prefix: ml/raw/
+    noise_increment: "0.05"
+    max_noise: "0.30"
+    affected_columns: "credit_score,income,debt_ratio"
+expected_response:
+  within: 120m
+  asserts:
+    - type: sensor_state
+      target: eval_status
+      condition: is_ready
+    - type: data_state
+      target: deployment_status
+      condition: not_exists

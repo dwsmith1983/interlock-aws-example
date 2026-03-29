@@ -1,0 +1,45 @@
+pipeline:
+  id: ml-evaluation
+  owner: data-platform
+  description: ML model evaluation triggered by training completion
+
+schedule:
+  trigger:
+    key: training_status
+    check: equals
+    field: complete
+    value: true
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: ":40"
+  expectedDuration: 2m
+  maxDuration: 10m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: training_status
+      check: equals
+      field: complete
+      value: true
+    - key: training_status
+      check: age_lt
+      field: updated_at
+      value: 2h
+
+job:
+  type: lambda
+  config:
+    functionName: "${environment}-ml-evaluation"
+    payload: '{"body": {"pipeline": "ml-evaluation"}}'
+
+postRun:
+  sensorTimeout: 2h
+  rules:
+    - key: eval_status
+      check: equals
+      field: passed
+      value: true

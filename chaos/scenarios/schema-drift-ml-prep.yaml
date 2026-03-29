@@ -1,0 +1,32 @@
+name: schema-drift-ml-prep
+description: >-
+  Adds unexpected columns and removes expected columns in raw feature CSV
+  files. Data prep Lambda fails during normalization due to missing
+  expected columns, blocking the entire ML pipeline.
+category: data-quality
+severity: moderate
+version: 1
+target:
+  layer: data
+  transport: s3
+  filter:
+    prefix: ml/raw/
+probability: 0.15
+safety:
+  max_affected_pct: 10
+  cooldown: 15m
+  sla_aware: true
+mutation:
+  type: schema-drift
+  params:
+    add_columns: "unexpected_feature_1,unexpected_feature_2"
+    remove_columns: "credit_score"
+expected_response:
+  within: 30m
+  asserts:
+    - type: sensor_state
+      target: data_prep_status
+      condition: is_ready
+    - type: job_state
+      target: ml-data-prep
+      condition: status:failed

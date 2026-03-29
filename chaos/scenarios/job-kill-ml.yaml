@@ -1,0 +1,33 @@
+name: job-kill-ml
+description: >-
+  Kills the training Lambda mid-execution by forcing a timeout. Interlock
+  classifies the failure as TRANSIENT and triggers a retry according to
+  the pipeline's retry policy.
+category: infrastructure
+severity: moderate
+version: 1
+target:
+  layer: orchestrator
+  transport: lambda
+  filter:
+    prefix: ml-training
+probability: 0.2
+safety:
+  max_affected_pct: 100
+  cooldown: 15m
+  sla_aware: true
+mutation:
+  type: job-kill
+  params:
+    pipeline: ml-training
+    job_function: "${environment}-ml-training"
+    kill_after: "5s"
+expected_response:
+  within: 20m
+  asserts:
+    - type: job_state
+      target: ml-training
+      condition: status:killed
+    - type: interlock_event
+      target: ml-training
+      condition: exists

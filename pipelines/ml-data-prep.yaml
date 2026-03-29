@@ -1,0 +1,43 @@
+pipeline:
+  id: ml-data-prep
+  owner: data-platform
+  description: ML feature preparation from raw CSVs
+
+schedule:
+  trigger:
+    type: cron
+    expression: "0 * * * *"
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: ":10"
+  expectedDuration: 2m
+  maxDuration: 8m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: raw_features
+      check: age_lt
+      field: updated_at
+      value: 2h
+
+job:
+  type: lambda
+  config:
+    functionName: "${environment}-ml-data-prep"
+    payload: '{"body": {"pipeline": "ml-data-prep"}}'
+
+postRun:
+  sensorTimeout: 2h
+  rules:
+    - key: data_prep_status
+      check: equals
+      field: complete
+      value: true
+    - key: data_prep_status
+      check: gte
+      field: row_count
+      value: 1

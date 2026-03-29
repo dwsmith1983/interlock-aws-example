@@ -1,4 +1,4 @@
-.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-dashboard deploy-dashboard upload-glue-scripts build-banking-generator build-banking-consumer build-banking-aggregator build-banking build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
+.PHONY: build-generator build-bronze build-delta-layer build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-dashboard deploy-dashboard upload-glue-scripts build-banking-generator build-banking-consumer build-banking-aggregator build-banking build-iot-generator build-iot-consumer build-iot-aggregator build-iot build-ml-generator build-ml-data-prep build-ml-training build-ml-evaluation build-ml-deployment build-ml build-all tf-init tf-apply tf-destroy clean deploy restart-schedules
 
 GENERATOR_DIR := generator
 BRONZE_DIR := bronze_consumer
@@ -117,7 +117,71 @@ build-banking-aggregator:
 build-banking: build-banking-generator build-banking-consumer build-banking-aggregator
 	@echo "Banking pipeline Lambda packages built."
 
-build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-banking
+# IoT pipeline build targets
+build-iot-generator:
+	@echo "Packaging iot-generator Lambda..."
+	@mkdir -p $(BUILD_DIR)/iot-generator-pkg
+	@cp iot/generator/handler.py $(BUILD_DIR)/iot-generator-pkg/
+	@cd $(BUILD_DIR)/iot-generator-pkg && zip -r ../iot-generator.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/iot-generator.zip"
+
+build-iot-consumer:
+	@echo "Packaging iot-consumer Lambda..."
+	@mkdir -p $(BUILD_DIR)/iot-consumer-pkg
+	@cp iot/consumer/handler.py $(BUILD_DIR)/iot-consumer-pkg/
+	@cd $(BUILD_DIR)/iot-consumer-pkg && zip -r ../iot-consumer.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/iot-consumer.zip"
+
+build-iot-aggregator:
+	@echo "Packaging iot-aggregator Lambda..."
+	@mkdir -p $(BUILD_DIR)/iot-aggregator-pkg
+	@cp iot/aggregator/handler.py $(BUILD_DIR)/iot-aggregator-pkg/
+	@cd $(BUILD_DIR)/iot-aggregator-pkg && zip -r ../iot-aggregator.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/iot-aggregator.zip"
+
+build-iot: build-iot-generator build-iot-consumer build-iot-aggregator
+	@echo "IoT pipeline Lambda packages built."
+
+# ML pipeline build targets
+build-ml-generator:
+	@echo "Packaging ml-generator Lambda..."
+	@mkdir -p $(BUILD_DIR)/ml-generator-pkg
+	@cp ml/generator/handler.py $(BUILD_DIR)/ml-generator-pkg/
+	@cd $(BUILD_DIR)/ml-generator-pkg && zip -r ../ml-generator.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/ml-generator.zip"
+
+build-ml-data-prep:
+	@echo "Packaging ml-data-prep Lambda..."
+	@mkdir -p $(BUILD_DIR)/ml-data-prep-pkg
+	@cp ml/data_prep/handler.py $(BUILD_DIR)/ml-data-prep-pkg/
+	@cd $(BUILD_DIR)/ml-data-prep-pkg && zip -r ../ml-data-prep.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/ml-data-prep.zip"
+
+build-ml-training:
+	@echo "Packaging ml-training Lambda..."
+	@mkdir -p $(BUILD_DIR)/ml-training-pkg
+	@cp ml/training/handler.py $(BUILD_DIR)/ml-training-pkg/
+	@cd $(BUILD_DIR)/ml-training-pkg && zip -r ../ml-training.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/ml-training.zip"
+
+build-ml-evaluation:
+	@echo "Packaging ml-evaluation Lambda..."
+	@mkdir -p $(BUILD_DIR)/ml-evaluation-pkg
+	@cp ml/evaluation/handler.py $(BUILD_DIR)/ml-evaluation-pkg/
+	@cd $(BUILD_DIR)/ml-evaluation-pkg && zip -r ../ml-evaluation.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/ml-evaluation.zip"
+
+build-ml-deployment:
+	@echo "Packaging ml-deployment Lambda..."
+	@mkdir -p $(BUILD_DIR)/ml-deployment-pkg
+	@cp ml/deployment/handler.py $(BUILD_DIR)/ml-deployment-pkg/
+	@cd $(BUILD_DIR)/ml-deployment-pkg && zip -r ../ml-deployment.zip . -x "__pycache__/*" "*.pyc"
+	@echo "  -> $(BUILD_DIR)/ml-deployment.zip"
+
+build-ml: build-ml-generator build-ml-data-prep build-ml-training build-ml-evaluation build-ml-deployment
+	@echo "ML pipeline Lambda packages built."
+
+build-all: build-generator build-bronze build-ppf-wheel build-glue-jobs build-interlock build-audit build-dashboard-api build-daily-sensor build-dryrun-demo build-banking build-iot build-ml
 	@echo "All build artifacts ready in $(BUILD_DIR)/"
 
 tf-init:

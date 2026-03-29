@@ -1,0 +1,34 @@
+name: cascade-delay-ml
+description: >-
+  Delays data_prep_status.complete from becoming true by suppressing the
+  sensor write for 25 minutes. The delay cascades through the ML pipeline:
+  training cannot start, evaluation cannot start, and deployment misses
+  its SLA deadline.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: ml-data-prep
+probability: 0.2
+safety:
+  max_affected_pct: 100
+  cooldown: 20m
+  sla_aware: true
+mutation:
+  type: cascade-delay
+  params:
+    pipeline: ml-data-prep
+    key: data_prep_status
+    delay_duration: "25m"
+expected_response:
+  within: 60m
+  asserts:
+    - type: interlock_event
+      target: ml-deployment
+      condition: exists
+    - type: job_state
+      target: ml-deployment
+      condition: is_pending

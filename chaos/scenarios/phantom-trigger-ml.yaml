@@ -1,0 +1,33 @@
+name: phantom-trigger-ml
+description: >-
+  Writes a phantom training_status sensor with complete=true pointing to
+  a stale or nonexistent model path. The evaluation pipeline triggers on
+  the phantom data and should detect the missing or stale model artifact.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: ml-evaluation
+probability: 0.2
+safety:
+  max_affected_pct: 100
+  cooldown: 10m
+  sla_aware: false
+mutation:
+  type: phantom-trigger
+  params:
+    pipeline: ml-evaluation
+    key: training_status
+    data: '{"complete": true, "accuracy": 0.97, "loss": 0.03, "model_path": "ml/models/model_nonexistent.json"}'
+expected_response:
+  within: 15m
+  asserts:
+    - type: job_state
+      target: ml-evaluation
+      condition: status:failed
+    - type: interlock_event
+      target: ml-evaluation
+      condition: exists

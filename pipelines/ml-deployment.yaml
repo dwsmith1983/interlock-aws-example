@@ -1,0 +1,49 @@
+pipeline:
+  id: ml-deployment
+  owner: data-platform
+  description: ML model deployment triggered by successful evaluation
+
+schedule:
+  trigger:
+    key: eval_status
+    check: equals
+    field: passed
+    value: true
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: ":50"
+  expectedDuration: 1m
+  maxDuration: 5m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: eval_status
+      check: equals
+      field: passed
+      value: true
+    - key: eval_status
+      check: gte
+      field: accuracy
+      value: 0.95
+    - key: eval_status
+      check: age_lt
+      field: updated_at
+      value: 2h
+
+job:
+  type: lambda
+  config:
+    functionName: "${environment}-ml-deployment"
+    payload: '{"body": {"pipeline": "ml-deployment"}}'
+
+postRun:
+  sensorTimeout: 2h
+  rules:
+    - key: deployment_status
+      check: equals
+      field: deployed
+      value: true

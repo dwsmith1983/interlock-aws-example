@@ -1,0 +1,33 @@
+name: trigger-timeout-ml
+description: >-
+  Prevents data_prep_status from updating after data prep completes,
+  simulating a lost sensor write. The training pipeline's trigger never
+  fires within the SLA window, and the watchdog detects STALE_TRIGGER.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: ml-training
+probability: 0.2
+safety:
+  max_affected_pct: 100
+  cooldown: 15m
+  sla_aware: true
+mutation:
+  type: trigger-timeout
+  params:
+    pipeline: ml-training
+    key: data_prep_status
+    suppress_duration: "30m"
+expected_response:
+  within: 35m
+  asserts:
+    - type: trigger_state
+      target: ml-training
+      condition: status:timeout
+    - type: job_state
+      target: ml-training
+      condition: is_pending

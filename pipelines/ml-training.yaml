@@ -1,0 +1,45 @@
+pipeline:
+  id: ml-training
+  owner: data-platform
+  description: ML model training triggered by data prep completion
+
+schedule:
+  trigger:
+    key: data_prep_status
+    check: equals
+    field: complete
+    value: true
+  evaluation:
+    window: 5m
+    interval: 1m
+
+sla:
+  deadline: ":30"
+  expectedDuration: 5m
+  maxDuration: 15m
+
+validation:
+  trigger: "ALL"
+  rules:
+    - key: data_prep_status
+      check: equals
+      field: complete
+      value: true
+    - key: data_prep_status
+      check: age_lt
+      field: updated_at
+      value: 2h
+
+job:
+  type: lambda
+  config:
+    functionName: "${environment}-ml-training"
+    payload: '{"body": {"pipeline": "ml-training"}}'
+
+postRun:
+  sensorTimeout: 2h
+  rules:
+    - key: training_status
+      check: equals
+      field: complete
+      value: true

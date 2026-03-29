@@ -1,0 +1,36 @@
+name: false-success-ml
+description: >-
+  Marks training_status as complete with normal accuracy but injects NaN
+  into the model artifact's loss field. The evaluation Lambda should
+  detect the NaN value and set eval_status.passed to false, blocking
+  deployment.
+category: state-consistency
+severity: moderate
+version: 1
+target:
+  layer: state
+  transport: dynamodb
+  filter:
+    prefix: ml-training
+probability: 0.3
+safety:
+  max_affected_pct: 100
+  cooldown: 10m
+  sla_aware: false
+mutation:
+  type: false-success
+  params:
+    pipeline: ml-training
+    key: training_status
+    artifact_path: ml/models/
+    inject_field: loss
+    inject_value: "NaN"
+expected_response:
+  within: 15m
+  asserts:
+    - type: sensor_state
+      target: eval_status
+      condition: is_ready
+    - type: data_state
+      target: deployment_status
+      condition: not_exists
